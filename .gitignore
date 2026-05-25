@@ -11,6 +11,7 @@ __pycache__/
 logs/
 models/
 runs/
+visual/
 configs/model.local.json
 configs/model.json
 configs/model.*.local.json
