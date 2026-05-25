@@ -15,6 +15,8 @@ def make_chat_model(
     api_key: str | None = None,
     temperature: float = 0.0,
     timeout_s: int = 60,
+    max_tokens: int | None = None,
+    enable_thinking: bool | None = None,
 ) -> OpenAICompatibleChatModel:
     return OpenAICompatibleChatModel(
         model=model_name,
@@ -22,6 +24,8 @@ def make_chat_model(
         base_url=base_url,
         temperature=temperature,
         timeout_s=timeout_s,
+        max_tokens=max_tokens,
+        enable_thinking=enable_thinking,
     )
 
 

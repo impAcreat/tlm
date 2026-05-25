@@ -100,6 +100,7 @@ class TeacherStudentClassroom:
                         round_result = self._teach_one(generation, task, student)
                         report.rounds.append(round_result)
                         file.write(json.dumps(round_result.to_dict(), ensure_ascii=False) + "\n")
+                        file.flush()
                         self._append_log(round_result)
         return report
 

@@ -15,6 +15,8 @@ class ModelConfig:
     api_key: str | None = None
     temperature: float = 0.0
     timeout_s: int = 60
+    max_tokens: int | None = None
+    enable_thinking: bool | None = None
 
 
 def load_model_config(path: str | Path) -> ModelConfig:
@@ -27,4 +29,6 @@ def load_model_config(path: str | Path) -> ModelConfig:
         api_key=data.get("api_key"),
         temperature=float(data.get("temperature", 0.0)),
         timeout_s=int(data.get("timeout_s", 60)),
+        max_tokens=int(data["max_tokens"]) if data.get("max_tokens") is not None else None,
+        enable_thinking=data.get("enable_thinking"),
     )

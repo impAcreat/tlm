@@ -34,6 +34,8 @@ class OpenAICompatibleChatModel:
     base_url: str | None = None
     temperature: float = 0.0
     timeout_s: int = 60
+    max_tokens: int | None = None
+    enable_thinking: bool | None = None
 
     def complete(self, messages: list[Message]) -> str:
         base_url = (
@@ -53,6 +55,10 @@ class OpenAICompatibleChatModel:
             "messages": messages,
             "temperature": self.temperature,
         }
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
+        if self.enable_thinking is not None:
+            payload["chat_template_kwargs"] = {"enable_thinking": self.enable_thinking}
         request = urllib.request.Request(
             f"{base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),

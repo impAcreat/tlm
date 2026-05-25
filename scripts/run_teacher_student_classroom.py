@@ -20,6 +20,8 @@ def main() -> None:
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--timeout-s", type=int, default=None, help="HTTP timeout for each model call")
+    parser.add_argument("--max-tokens", type=int, default=None, help="Maximum tokens generated per model call")
+    parser.add_argument("--enable-thinking", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--students", type=int, default=3)
     parser.add_argument("--tasks", type=int, default=3)
     parser.add_argument("--generations", type=int, default=1)
@@ -43,6 +45,10 @@ def main() -> None:
     api_key = args.api_key or (config.api_key if config else None)
     temperature = config.temperature if config else 0.0
     timeout_s = args.timeout_s if args.timeout_s is not None else (config.timeout_s if config else 60)
+    max_tokens = args.max_tokens if args.max_tokens is not None else (config.max_tokens if config else None)
+    enable_thinking = (
+        args.enable_thinking if args.enable_thinking is not None else (config.enable_thinking if config else None)
+    )
 
     student_model = make_chat_model(
         model_name,
@@ -50,6 +56,8 @@ def main() -> None:
         api_key=api_key,
         temperature=temperature,
         timeout_s=timeout_s,
+        max_tokens=max_tokens,
+        enable_thinking=enable_thinking,
     )
     teacher_model = None
     if teacher_name:
@@ -59,6 +67,8 @@ def main() -> None:
             api_key=api_key,
             temperature=temperature,
             timeout_s=timeout_s,
+            max_tokens=max_tokens,
+            enable_thinking=enable_thinking,
         )
 
     benchmark = HumanEvalBenchmark(task_ids=[f"HumanEval/{i}" for i in range(args.tasks)])

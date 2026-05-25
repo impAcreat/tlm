@@ -4,5 +4,7 @@
   "student_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
   "teacher_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
   "temperature": 0.0,
-  "timeout_s": 300
+  "timeout_s": 300,
+  "max_tokens": 512,
+  "enable_thinking": false
 }
