@@ -1,0 +1,8 @@
+{
+  "base_url": "http://localhost:8000/v1",
+  "api_key": "EMPTY",
+  "student_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+  "teacher_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+  "temperature": 0.0,
+  "timeout_s": 300
+}

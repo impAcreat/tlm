@@ -1,0 +1,16 @@
+.conda/
+.cache/
+.tmp/
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+logs/
+models/
+runs/
+configs/model.local.json
+configs/model.json
+configs/model.*.local.json

@@ -1,0 +1,10 @@
+name: agent
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - human-eval>=1.0.3
+      - pocketflow>=0.0.3
+      - -e .

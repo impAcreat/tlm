@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "classroom"
+version = "0.1.0"
+description = "A teacher-student self-evolving LLM agent prototype with layered harnesses."
+requires-python = ">=3.11"
+dependencies = ["human-eval>=1.0.3", "pocketflow>=0.0.3"]
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
