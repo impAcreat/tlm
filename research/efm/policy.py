@@ -1,0 +1,218 @@
+"""Versioned, bounded prompt-policy data structures for EFM."""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+import re
+from typing import Any
+
+
+_ADVICE_PATTERN = re.compile(
+    r"\b(agent|you)\s+(should|must|try to)\b|\bnext action\b|\brecommend\b|"
+    r"\b(further exploration|guide(?:s|d)? exploration|guide further|where to look|look next|search elsewhere)\b|"
+    r"智能体.*(应该|必须)|下一步|建议.*(执行|选择|使用)",
+    re.IGNORECASE,
+)
+
+
+def _scope_matches(scope: dict[str, str], *, environment_id: str, task_type: str) -> bool:
+    return (
+        (not scope.get("environment_id") or scope["environment_id"] == environment_id)
+        and (not scope.get("task_type") or scope["task_type"] == task_type)
+    )
+
+
+@dataclass(frozen=True)
+class PolicyRule:
+    id: str
+    scope: dict[str, str]
+    instruction: str
+    avoid: str
+    support_episode_ids: list[str] = field(default_factory=list)
+    status: str = "active"
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PolicyRule":
+        return cls(
+            id=str(value.get("id", "")),
+            scope={str(k): str(v) for k, v in dict(value.get("scope") or {}).items()},
+            instruction=str(value.get("instruction", "")).strip(),
+            avoid=str(value.get("avoid", "")).strip(),
+            support_episode_ids=[str(item) for item in value.get("support_episode_ids", [])],
+            status=str(value.get("status", "active")),
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PolicyExample:
+    id: str
+    scope: dict[str, str]
+    action_prefix: str
+    situation: str
+    feedback: str
+    source_episode_ids: list[str] = field(default_factory=list)
+    status: str = "active"
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PolicyExample":
+        return cls(
+            id=str(value.get("id", "")),
+            scope={str(k): str(v) for k, v in dict(value.get("scope") or {}).items()},
+            action_prefix=str(value.get("action_prefix", "")).strip().lower(),
+            situation=str(value.get("situation", "")).strip(),
+            feedback=str(value.get("feedback", "")).strip(),
+            source_episode_ids=[str(item) for item in value.get("source_episode_ids", [])],
+            status=str(value.get("status", "active")),
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class EFMPolicy:
+    version: int = 0
+    rules: list[PolicyRule] = field(default_factory=list)
+    examples: list[PolicyExample] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any] | None) -> "EFMPolicy":
+        value = value or {}
+        return cls(
+            version=int(value.get("version", 0)),
+            rules=[PolicyRule.from_dict(item) for item in value.get("rules", []) if isinstance(item, dict)],
+            examples=[PolicyExample.from_dict(item) for item in value.get("examples", []) if isinstance(item, dict)],
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "version": self.version,
+            "rules": [rule.to_dict() for rule in self.rules],
+            "examples": [example.to_dict() for example in self.examples],
+        }
+
+    def select_rules(self, *, environment_id: str, task_type: str, limit: int = 4) -> list[PolicyRule]:
+        matching = [
+            rule for rule in self.rules
+            if rule.status == "active" and _scope_matches(
+                rule.scope, environment_id=environment_id, task_type=task_type,
+            )
+        ]
+        return sorted(matching, key=lambda item: (bool(item.scope), item.id), reverse=True)[:limit]
+
+    def select_examples(
+        self,
+        *,
+        environment_id: str,
+        task_type: str,
+        action: str,
+        limit: int = 2,
+    ) -> list[PolicyExample]:
+        prefix = str(action).strip().split(maxsplit=1)[0].lower() if str(action).strip() else ""
+        matching = [
+            example for example in self.examples
+            if example.status == "active"
+            and _scope_matches(example.scope, environment_id=environment_id, task_type=task_type)
+            and (not example.action_prefix or example.action_prefix == prefix)
+        ]
+        return matching[:limit]
+
+
+@dataclass(frozen=True)
+class PolicyPatch:
+    base_version: int
+    edits: list[dict[str, Any]]
+    reasoning: str = ""
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PolicyPatch":
+        return cls(
+            base_version=int(value.get("base_version", -1)),
+            edits=[item for item in value.get("edits", []) if isinstance(item, dict)],
+            reasoning=str(value.get("reasoning", "")),
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def validate_patch(
+    patch: PolicyPatch,
+    policy: EFMPolicy,
+    *,
+    min_support: int,
+    max_edits: int,
+) -> str | None:
+    """Return an error string, or ``None`` when a patch is safe to evaluate."""
+    if patch.base_version != policy.version:
+        return "stale_base_version"
+    if not patch.edits or len(patch.edits) > max_edits:
+        return "invalid_edit_budget"
+    for edit in patch.edits:
+        op = str(edit.get("op", ""))
+        if op == "add_rule":
+            if not isinstance(edit.get("scope", {}), dict):
+                return "edit_scope_not_object"
+            instruction = str(edit.get("instruction", "")).strip()
+            avoid = str(edit.get("avoid", "")).strip()
+            support = {str(item) for item in edit.get("support_episode_ids", []) if str(item)}
+            if not instruction or not avoid or len(support) < min_support:
+                return "rule_lacks_content_or_support"
+            if _ADVICE_PATTERN.search(instruction) or _ADVICE_PATTERN.search(avoid):
+                return "rule_contains_agent_advice"
+        elif op == "add_example":
+            if not isinstance(edit.get("scope", {}), dict):
+                return "edit_scope_not_object"
+            if not str(edit.get("situation", "")).strip() or not str(edit.get("feedback", "")).strip():
+                return "example_lacks_content"
+            if _ADVICE_PATTERN.search(str(edit.get("feedback", ""))):
+                return "example_contains_agent_advice"
+        elif op not in {"retire_rule", "retire_example"}:
+            return "unsupported_edit"
+    return None
+
+
+def apply_patch(
+    policy: EFMPolicy,
+    patch: PolicyPatch,
+    *,
+    max_rules: int,
+    max_examples: int,
+) -> EFMPolicy:
+    """Apply an already validated patch, keeping the policy deliberately small."""
+    rules = list(policy.rules)
+    examples = list(policy.examples)
+    for index, edit in enumerate(patch.edits, start=1):
+        op = str(edit["op"])
+        if op == "add_rule":
+            rules.append(PolicyRule(
+                id=str(edit.get("id") or f"rule-v{policy.version + 1}-{index}"),
+                scope={str(k): str(v) for k, v in dict(edit.get("scope") or {}).items()},
+                instruction=str(edit["instruction"]).strip(),
+                avoid=str(edit["avoid"]).strip(),
+                support_episode_ids=[str(item) for item in edit.get("support_episode_ids", [])],
+            ))
+        elif op == "add_example":
+            examples.append(PolicyExample(
+                id=str(edit.get("id") or f"example-v{policy.version + 1}-{index}"),
+                scope={str(k): str(v) for k, v in dict(edit.get("scope") or {}).items()},
+                action_prefix=str(edit.get("action_prefix", "")).strip().lower(),
+                situation=str(edit["situation"]).strip(),
+                feedback=str(edit["feedback"]).strip(),
+                source_episode_ids=[str(item) for item in edit.get("source_episode_ids", [])],
+            ))
+        elif op == "retire_rule":
+            rules = [rule if rule.id != str(edit.get("id")) else PolicyRule(**{**rule.to_dict(), "status": "retired"}) for rule in rules]
+        elif op == "retire_example":
+            examples = [example if example.id != str(edit.get("id")) else PolicyExample(**{**example.to_dict(), "status": "retired"}) for example in examples]
+    active_rules = [item for item in rules if item.status == "active"][-max_rules:]
+    inactive_rules = [item for item in rules if item.status != "active"]
+    active_examples = [item for item in examples if item.status == "active"][-max_examples:]
+    inactive_examples = [item for item in examples if item.status != "active"]
+    return EFMPolicy(
+        version=policy.version + 1,
+        rules=inactive_rules + active_rules,
+        examples=inactive_examples + active_examples,
+    )

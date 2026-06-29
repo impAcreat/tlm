@@ -1,0 +1,12 @@
+/*
+!/.gitignore
+!/README.md
+!/IDEA.md
+!/docs
+!/experiments
+!/research
+
+# backup/snapshot artifacts
+*.bak
+*.preopt
+.bak_*/

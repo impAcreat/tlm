@@ -1,0 +1,1251 @@
+[
+  {
+    "action": "clean spatula 1 with sinkbasin 1",
+    "raw_observation": "You clean the spatula 1 using the sinkbasin 1.",
+    "task": "clean some spatula and put it in drawer.",
+    "recent_actions": [
+      "go to sinkbasin 1",
+      "move spatula 1 to sinkbasin 1",
+      "examine sinkbasin 1",
+      "take spatula 1 from sinkbasin 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent performed the action of cleaning spatula 1 using sinkbasin 1.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "The spatula 1 was cleaned using the sinkbasin 1.",
+        "signal_type": "progress"
+      },
+      "C": {
+        "core_signal": "Spatula 1 has been cleaned using sinkbasin 1.",
+        "signal_type": "progress"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "examine countertop 1",
+    "raw_observation": "On the countertop 1, you see a glassbottle 2, and a papertowelroll 1.",
+    "task": "cool some mug and put it in coffeemachine.",
+    "recent_actions": [
+      "look",
+      "examine cabinet 1",
+      "examine mug 1",
+      "examine coffeemachine 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The examined countertop 1 contains a glassbottle 2 and a papertowelroll 1, with no mug visible at this location.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The observation confirms the presence of a glassbottle 2 and a papertowelroll 1 on countertop 1, but no mug is present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "The countertop 1 contains a glassbottle 2 and a papertowelroll 1. No mug or coffeemachine is observed on the countertop.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to countertop 1",
+    "raw_observation": "You arrive at countertop 1. On the countertop 1, you see a mug 1, and a pot 1.",
+    "task": "cool some pan and put it in countertop.",
+    "recent_actions": [
+      "examine stoveburner 3",
+      "examine pan 1",
+      "move pan 1 to stoveburner 3",
+      "take pan 1 from stoveburner 3"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent moved pan 1 from stoveburner 3 to countertop 1. A pot 1 is also present on countertop 1.",
+        "signal_type": "state_change"
+      },
+      "B": {
+        "core_signal": "The pan 1 is currently located on countertop 1 alongside a mug 1.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Pan 1 is no longer on stoveburner 3 and is currently in the agent's possession. Countertop 1 contains a mug 1 and a pot 1.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to cabinet 1",
+    "raw_observation": "You arrive at cabinet 1. On the cabinet 1, you see nothing.",
+    "task": "cool some mug and put it in cabinet.",
+    "recent_actions": [],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent moved to cabinet 1, but cabinet 1 contains no mugs.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent arrived at cabinet 1, but the cabinet contains no items.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Cabinet 1 is empty. No mug is present on cabinet 1.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "take mug 1 from microwave 1",
+    "raw_observation": "You pick up the mug 1 from the microwave 1.",
+    "task": "cool some mug and put it in coffeemachine.",
+    "recent_actions": [
+      "go to microwave 1",
+      "examine mug 1",
+      "move mug 1 to microwave 1",
+      "examine microwave 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent successfully picked up mug 1 from microwave 1.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "The agent picked up mug 1 from microwave 1.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "The mug was removed from the microwave. The mug is now in the agent's possession.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a lettuce 1.",
+    "task": "put a cool bread in countertop.",
+    "recent_actions": [
+      "go to fridge 1",
+      "go to cabinet 1",
+      "go to cabinet 2",
+      "go to drawer 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent observed only a lettuce inside an open fridge 1; no bread was present in that location.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is at fridge 1, which is open and contains only lettuce 1; no cool bread is present.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains lettuce 1. No bread is observed in fridge 1.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "examine pan 1",
+    "raw_observation": "This is a normal pan 1. In it, you see nothing.",
+    "task": "cool some pan and put it in countertop.",
+    "recent_actions": [
+      "take pan 1 from countertop 1",
+      "go to sinkbasin 1",
+      "go to stoveburner 1",
+      "examine stoveburner 3"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The pan is empty and currently located at the stoveburner 1, not on the countertop as the task requires.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The pan 1 contains no items and is currently being examined, not placed on the countertop.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Pan 1 is on the countertop and contains no visible contents. No cooling action has been observed.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      }
+    }
+  },
+  {
+    "action": "go to sinkbasin 1",
+    "raw_observation": "You arrive at sinkbasin 1. On the sinkbasin 1, you see a spoon 1, and a tomato 3.",
+    "task": "clean some spatula and put it in drawer.",
+    "recent_actions": [
+      "go to cabinet 2",
+      "open cabinet 2",
+      "go to countertop 1",
+      "examine countertop 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent is at sinkbasin 1, which contains a spoon 1 and a tomato 3; the task object (spatula) is not present here.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is at sinkbasin 1, which contains a spoon 1 and a tomato 3; no spatula is present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Sinkbasin 1 contains a spoon 1 and a tomato 3. No spatula is present.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a bowl 3, a bread 1, a cup 1, a egg 1, a pan 1, a plate 2, a potato 1, and a tomato 2.",
+    "task": "put a cool lettuce in countertop.",
+    "recent_actions": [
+      "look",
+      "go to fridge 1",
+      "go to cabinet 3",
+      "go to cabinet 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The observation confirms the absence of a 'cool lettuce' and a 'countertop' in the current data, specifically noting the contents of fridge 1 and recent locations.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The observation confirms the agent is at fridge 1, which is open, but lists no lettuce among the visible items.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains a bowl 3, bread 1, cup 1, egg 1, pan 1, plate 2, potato 1, and tomato 2. No lettuce is visible inside.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "move mug 1 to coffeemachine 1",
+    "raw_observation": "You move the mug 1 to the coffeemachine 1.",
+    "task": "cool some mug and put it in coffeemachine.",
+    "recent_actions": [
+      "take mug 1 from coffeemachine 1",
+      "go to microwave 1",
+      "go to coffeemachine 1",
+      "examine mug 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The recorded observation confirms the mug was moved to the coffeemachine 1, but the task's first requirement (cooling) has not been established by the data.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The mug 1 is located at the coffeemachine 1.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "The mug was moved to the coffeemachine. No temperature change was observed.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a lettuce 1.",
+    "task": "cool some bread and put it in countertop.",
+    "recent_actions": [
+      "go to cabinet 1",
+      "go to microwave 1",
+      "inventory",
+      "go to cabinet 2"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent moved to fridge 1 but found only lettuce 1 inside, not bread.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is at fridge 1, which is open and contains lettuce 1; no bread or countertop is visible in this observation.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains lettuce 1. No bread is observed inside the fridge.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "examine countertop 1",
+    "raw_observation": "On the countertop 1, you see a mug 1, and a pot 1.",
+    "task": "cool some pan and put it in countertop.",
+    "recent_actions": [
+      "go to countertop 1",
+      "go to fridge 1",
+      "cool pan 1 with fridge 1",
+      "go to countertop 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The raw observation confirms a pot 1 is present on countertop 1, but it does not identify whether this object is the pan 1 mentioned in the task.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The pan 1 is not listed among the items on countertop 1; only a mug 1 and a pot 1 are present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "The countertop 1 contains a mug 1 and a pot 1. The pan 1 has been cooled using fridge 1 and is now present at countertop 1.",
+        "signal_type": "progress"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      }
+    }
+  },
+  {
+    "action": "go to cabinet 1",
+    "raw_observation": "You arrive at cabinet 1. On the cabinet 1, you see nothing.",
+    "task": "cool some mug and put it in cabinet.",
+    "recent_actions": [
+      "close microwave 1",
+      "go to fridge 1",
+      "open fridge 1",
+      "cool mug 2 with fridge 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent moved to cabinet 1 where no objects were observed, leaving the mug unplaced.",
+        "signal_type": "state_change"
+      },
+      "B": {
+        "core_signal": "The agent is at cabinet 1, but the cabinet contains no items.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "The mug has been cooled using fridge 1 and is now at cabinet 1, but no mug is visible on cabinet 1.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to drawer 2",
+    "raw_observation": "You arrive at drawer 2. The drawer 2 is closed.",
+    "task": "put a clean spatula in drawer.",
+    "recent_actions": [
+      "go to countertop 1",
+      "go to drawer 1",
+      "open drawer 1",
+      "go to cabinet 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent arrived at drawer 2, which was observed as closed.",
+        "signal_type": "state_change"
+      },
+      "B": {
+        "core_signal": "The agent arrived at drawer 2, which is currently closed.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Drawer 2 is closed.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a apple 1, a bread 1, a plate 1, a potato 1, and a tomato 2.",
+    "task": "cool some lettuce and put it in countertop.",
+    "recent_actions": [
+      "go to fridge 1",
+      "go to countertop 1",
+      "go to drawer 1",
+      "go to cabinet 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The supplied data contains no lettuce; the open fridge 1 only contains an apple, bread, plate, potato, and tomato.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "Fridge 1 contains an apple, bread, plate, potato, and tomato; lettuce is not present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains an apple 1, bread 1, plate 1, potato 1, and tomato 2. No lettuce is visible inside the fridge.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "open fridge 1",
+    "raw_observation": "You open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 3, a egg 1, a mug 1, a plate 3, a potato 1, and a tomato 1.",
+    "task": "cool some lettuce and put it in countertop.",
+    "recent_actions": [
+      "go to fridge 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "Lettuce is not present in fridge 1; only a bowl, bread, cup, egg, mug, plate, potato, and tomato are observed.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The observation confirms that the action 'open fridge 1' was executed and the fridge is now open.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open. Inside, there is a bowl 1, bread 2, cup 3, egg 1, mug 1, plate 3, potato 1, and tomato 1.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to cabinet 2",
+    "raw_observation": "You arrive at cabinet 2. The cabinet 2 is open. In it, you see a bowl 1, and a soapbottle 1.",
+    "task": "put a cool bread in countertop.",
+    "recent_actions": [
+      "go to microwave 1",
+      "go to cabinet 4",
+      "go to fridge 1",
+      "go to cabinet 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The environment contains only a bowl 1 and a soapbottle 1 in cabinet 2; no bread is present.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "Cabinet 2 contains a bowl 1 and a soapbottle 1; no cool bread is present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Cabinet 2 is open and contains a bowl 1 and a soapbottle 1. No bread is present in cabinet 2.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see nothing.",
+    "task": "cool some bread and put it in countertop.",
+    "recent_actions": [
+      "go to cabinet 1",
+      "examine cabinet 1",
+      "go to cabinet 2",
+      "go to microwave 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent arrived at an empty fridge 1, which contradicts the task goal of putting bread on the countertop.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent arrived at fridge 1, which was open and contained no items.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains no items. No bread is present in the fridge.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to coffeemachine 1",
+    "raw_observation": "You arrive at coffeemachine 1. On the coffeemachine 1, you see a mug 2.",
+    "task": "cool some mug and put it in cabinet.",
+    "recent_actions": [
+      "go to cabinet 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent went to coffeemachine 1, where a mug 2 is located. The agent previously went to cabinet 1 without performing that action.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "The agent arrived at coffeemachine 1 and observed a mug 2 present on the machine.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "A mug is present on coffeemachine 1. The agent has not yet performed any action to cool the mug or place it in the cabinet.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      }
+    }
+  },
+  {
+    "action": "move pan 1 to countertop 1",
+    "raw_observation": "You move the pan 1 to the countertop 1.",
+    "task": "cool some pan and put it in countertop.",
+    "recent_actions": [
+      "cool pan 1 with fridge 1",
+      "go to countertop 1",
+      "examine countertop 1",
+      "examine pan 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent moved pan 1 to countertop 1 in step 49. Raw observation confirms the object transfer.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "The pan 1 was moved to the countertop 1.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Pan 1 was moved to countertop 1 after being cooled with fridge 1.",
+        "signal_type": "progress"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "look",
+    "raw_observation": "You are facing the fridge 1. Next to it, you see nothing.",
+    "task": "cool some pan and put it in countertop.",
+    "recent_actions": [
+      "move pan 1 to fridge 1",
+      "take pan 1 from fridge 1",
+      "cool pan 1 with fridge 1",
+      "close fridge 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent is currently facing the fridge and observes nothing adjacent to it.",
+        "signal_type": "state_change"
+      },
+      "B": {
+        "core_signal": "The agent moved pan 1 to the fridge, cooled it, closed the fridge, and then took pan 1 out of the fridge.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Pan 1 is cooled and has been removed from fridge 1. The fridge door is closed.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "inventory",
+    "raw_observation": "You are not carrying anything.",
+    "task": "cool some lettuce and put it in countertop.",
+    "recent_actions": [
+      "go to sinkbasin 1",
+      "go to fridge 1",
+      "take lettuce 1 from fridge 1",
+      "inventory"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent is currently not carrying any items.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is not carrying anything after taking lettuce 1 from fridge 1.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "The agent is carrying lettuce after taking it from the fridge.",
+        "signal_type": "progress"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to cabinet 1",
+    "raw_observation": "You arrive at cabinet 1. On the cabinet 1, you see a vase 1.",
+    "task": "clean some spatula and put it in drawer.",
+    "recent_actions": [
+      "go to sinkbasin 1",
+      "go to cabinet 1",
+      "go to drawer 1",
+      "go to sinkbasin 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent is at cabinet 1 where a vase 1 is located, but no spatula is visible in the raw observation.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is at cabinet 1, where a vase 1 is located; a spatula is not observed.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Cabinet 1 contains a vase 1. No spatula is visible on cabinet 1.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "examine mug 1",
+    "raw_observation": "This is a normal mug 1. In it, you see nothing.",
+    "task": "cool some mug and put it in coffeemachine.",
+    "recent_actions": [
+      "go to cabinet 3",
+      "examine mug 1",
+      "go to fridge 1",
+      "go to microwave 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent examined mug 1 and observed it contains nothing.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "Mug 1 is located at the current position and contains no items.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Mug 1 is empty and contains no visible contents.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a egg 1, a lettuce 2, and a pan 1.",
+    "task": "cool some potato and put it in microwave.",
+    "recent_actions": [
+      "go to fridge 1",
+      "go to cabinet 1",
+      "go to cabinet 2",
+      "open cabinet 2"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "Fridge 1 contains an egg, lettuce, and a pan; no potato is present in the observed data.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "Fridge 1 contains an egg, lettuce, and a pan; no potato is present.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains egg 1, lettuce 2, and pan 1. No potato is present.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to cabinet 1",
+    "raw_observation": "You arrive at cabinet 1. On the cabinet 1, you see a plate 1, and a soapbottle 1.",
+    "task": "cool some lettuce and put it in countertop.",
+    "recent_actions": [
+      "go to drawer 1",
+      "open drawer 1",
+      "go to sinkbasin 1",
+      "go to fridge 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The environment contains lettuce, but the current location (cabinet 1) does not contain it; the agent is at cabinet 1 where only a plate and a soapbottle are visible.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is at cabinet 1, which contains a plate 1 and a soapbottle 1.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Cabinet 1 contains a plate 1 and a soapbottle 1. No lettuce or cooling equipment is observed.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "go to fridge 1",
+    "raw_observation": "You arrive at fridge 1. The fridge 1 is open. In it, you see a egg 1, a lettuce 2, and a pan 1.",
+    "task": "cool some potato and put it in microwave.",
+    "recent_actions": [
+      "open fridge 1",
+      "go to cabinet 1",
+      "go to cabinet 2",
+      "go to cabinet 3"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "Fridge 1 contains an egg, lettuce, and a pan, but no potato is observed.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The observation confirms the agent is at fridge 1, which is open and contains an egg, lettuce, and a pan; no potato is present.",
+        "signal_type": "ambiguity"
+      },
+      "C": {
+        "core_signal": "Fridge 1 is open and contains egg 1, lettuce 2, and pan 1. No potato is present.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "open cabinet 2",
+    "raw_observation": "You open the cabinet 2. The cabinet 2 is open. In it, you see a plate 1.",
+    "task": "put a cool mug in cabinet.",
+    "recent_actions": [
+      "go to coffeemachine 1",
+      "examine coffeemachine 1",
+      "inventory",
+      "go to cabinet 2"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent opened cabinet 2, which contains a plate 1.",
+        "signal_type": "progress"
+      },
+      "B": {
+        "core_signal": "Cabinet 2 is open and contains a plate 1; a cool mug is not present in the cabinet.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "Cabinet 2 is open and contains plate 1. No mug is visible inside.",
+        "signal_type": "ambiguity"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": false,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": false,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "take soapbar 1 from countertop 1",
+    "raw_observation": "You pick up the soapbar 1 from the countertop 1.",
+    "task": "put a clean soapbar in countertop.",
+    "recent_actions": [
+      "examine countertop 1",
+      "examine countertop 1",
+      "examine countertop 1",
+      "examine countertop 1"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The soapbar 1 was observed on the countertop 1 prior to the action.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The soapbar 1 was located on countertop 1 and was successfully picked up.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "The soapbar 1 was removed from countertop 1.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": true
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  },
+  {
+    "action": "look",
+    "raw_observation": "You are facing the cabinet 2. Next to it, you see nothing.",
+    "task": "cool some mug and put it in cabinet.",
+    "recent_actions": [
+      "go to coffeemachine 1",
+      "take mug 2 from coffeemachine 1",
+      "go to cabinet 1",
+      "go to cabinet 2"
+    ],
+    "feedback": {
+      "A": {
+        "core_signal": "The agent is facing cabinet 2 with no adjacent objects visible, but the task requires the mug to be cooled first, which has not occurred yet.",
+        "signal_type": "ambiguity"
+      },
+      "B": {
+        "core_signal": "The agent is facing cabinet 2, and the observation confirms no items are visible next to it.",
+        "signal_type": "state_change"
+      },
+      "C": {
+        "core_signal": "The cabinet is accessible, and no objects are visible next to it.",
+        "signal_type": "state_change"
+      }
+    },
+    "judge_30b": {
+      "A": {
+        "faithful": false,
+        "signal_ok": false,
+        "vacuous": false
+      },
+      "B": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      },
+      "C": {
+        "faithful": true,
+        "signal_ok": true,
+        "vacuous": false
+      }
+    }
+  }
+]

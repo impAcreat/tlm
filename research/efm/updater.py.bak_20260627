@@ -1,0 +1,392 @@
+"""Low-cost, validation-gated prompt-policy updates for EFM."""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from typing import Any, Callable
+
+from .models import FeedbackRuntimeConfig, PolicyUpdateDecision, StepFeedback, TrajectoryCorrection
+from .policy import EFMPolicy, PolicyPatch, apply_patch, validate_patch
+from .quality import score_feedback
+from .prompts import GATE_SYSTEM, POLICY_SYSTEM, TRAJECTORY_SYSTEM, gate_user_prompt, policy_user_prompt, trajectory_batch_user_prompt
+
+
+def _json_value(response: str) -> Any:
+    text = str(response or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(text):
+            if char in "[{":
+                try:
+                    return decoder.raw_decode(text[index:])[0]
+                except json.JSONDecodeError:
+                    continue
+    raise ValueError("model did not return JSON")
+
+
+def _clip(value: Any, limit: int) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    return text if len(text) <= limit else text[:limit] + "\n...[truncated]"
+
+
+_CORRECTION_ADVICE_PATTERN = re.compile(
+    r"\b(you can|consider|should|must|need to|next|further inspection|"
+    r"searching other|turn it on|might be)\b",
+    re.IGNORECASE,
+)
+
+
+def _valid_correction(row: dict[str, Any]) -> bool:
+    better_feedback = str(row.get("better_feedback", "")).strip()
+    problem = str(row.get("problem", "")).strip()
+    if not better_feedback or not problem:
+        return False
+    return _CORRECTION_ADVICE_PATTERN.search(better_feedback) is None
+
+
+class PolicyUpdater:
+    """Collect trajectories, propose one small patch, then gate it offline."""
+
+    def __init__(
+        self,
+        *,
+        state: dict,
+        config: FeedbackRuntimeConfig,
+        complete: Callable[..., str],
+        render_candidate: Callable[[dict, EFMPolicy], StepFeedback],
+    ) -> None:
+        self.state = state
+        self.config = config
+        self.complete = complete
+        self.render_candidate = render_candidate
+        self.state.setdefault("policy", EFMPolicy().to_dict())
+        self.state.setdefault("episodes", [])
+        self.state.setdefault("corrections", [])
+        self.state.setdefault("policy_updates", [])
+        self.state.setdefault("policy_cursor", 0)
+
+    def observe_episode(self, episode: dict) -> None:
+        digest = hashlib.sha256(str(episode["episode_id"]).encode()).digest()[0] / 255
+        episode["split"] = "validation" if digest < self.config.policy_validation_fraction else "train"
+        self.state["episodes"].append(episode)
+
+    def maybe_update(self) -> PolicyUpdateDecision | None:
+        if not self.config.policy_update_enabled:
+            return None
+        policy = EFMPolicy.from_dict(self.state["policy"])
+        cursor = int(self.state.get("policy_cursor", 0))
+        episodes = self.state["episodes"]
+        window = [item for item in episodes[cursor:] if item.get("policy_version") == policy.version]
+        if len(window) < self.config.policy_window_episodes:
+            return None
+
+        analysis = self._select_analysis(window)
+        corrections = self._review(analysis)
+        self.state["corrections"].extend(correction.to_dict() for correction in corrections)
+        decision, candidate = self._propose_and_gate(policy, corrections, window)
+        self.state["policy_updates"].append(decision.to_dict())
+        self.state["policy_cursor"] = len(episodes)
+        if decision.accepted and candidate is not None:
+            self.state["policy"] = candidate.to_dict()
+        return decision
+
+    def _select_analysis(self, window: list[dict]) -> list[dict]:
+        training = [item for item in window if item.get("split") == "train" and item.get("trace")]
+        failures = [item for item in training if not item.get("success")]
+        successes = [item for item in training if item.get("success")]
+        # Spread selection across task types so corrections span multiple types,
+        # which lets the policy proposer write environment-scoped rules instead
+        # of narrow task-type-scoped ones.
+        budget = self.config.policy_analysis_episodes
+        task_types: dict[str, list[dict]] = {}
+        for ep in failures + successes:
+            tt = str(ep.get("task_type") or "unknown")
+            task_types.setdefault(tt, []).append(ep)
+        if len(task_types) <= 1:
+            return (failures + successes)[:budget]
+        # Round-robin across task types (failures-first within each bucket)
+        result: list[dict] = []
+        buckets = list(task_types.values())
+        i = 0
+        while len(result) < budget and any(buckets):
+            bucket = buckets[i % len(buckets)]
+            if bucket:
+                result.append(bucket.pop(0))
+            i += 1
+        return result
+
+    def _review(self, episodes: list[dict]) -> list[TrajectoryCorrection]:
+        corrections: list[TrajectoryCorrection] = []
+        for start in range(0, len(episodes), 4):
+            payload = []
+            valid_steps: dict[str, set[int]] = {}
+            for episode in episodes[start:start + 4]:
+                valid_steps[str(episode["episode_id"])] = {
+                    int(row["step_id"]) for row in episode["trace"]
+                }
+                trace = [
+                    {
+                        "step_id": row["step_id"],
+                        "action": row["action"],
+                        "raw_observation": _clip(row["raw_observation"], 2_000),
+                        "step_feedback": row["step_feedback"],
+                    }
+                    for row in episode["trace"]
+                ]
+                payload.append({
+                    "episode_id": episode["episode_id"],
+                    "task_description": _clip(episode.get("task_description", ""), 2_000),
+                    "success": bool(episode.get("success")),
+                    "trace": _clip(trace, self.config.trace_char_limit),
+                })
+            try:
+                value = _json_value(self.complete(
+                    TRAJECTORY_SYSTEM,
+                    trajectory_batch_user_prompt(episodes=payload),
+                    max_tokens=self.config.trajectory_max_tokens,
+                    stage="efm_trajectory_review",
+                ))
+                rows = value.get("corrections", []) if isinstance(value, dict) else []
+                for row in rows:
+                    if not isinstance(row, dict) or not _valid_correction(row):
+                        continue
+                    episode_id = str(row.get("episode_id", ""))
+                    step_id = int(row.get("step_id", -1))
+                    if episode_id not in valid_steps or step_id not in valid_steps[episode_id]:
+                        continue
+                    correction = TrajectoryCorrection(
+                        episode_id=episode_id,
+                        step_id=step_id,
+                        original_feedback=str(row.get("original_feedback", "")).strip(),
+                        problem=str(row.get("problem", "")).strip(),
+                        better_feedback=str(row.get("better_feedback", "")).strip(),
+                        event_type=str(row.get("event_type", "")).strip(),
+                    )
+                    corrections.append(correction)
+            except Exception:
+                continue
+        return corrections
+
+    def _propose_and_gate(
+        self,
+        policy: EFMPolicy,
+        corrections: list[TrajectoryCorrection],
+        window: list[dict],
+    ) -> tuple[PolicyUpdateDecision, EFMPolicy | None]:
+        if not corrections:
+            return PolicyUpdateDecision(False, "no_corrections", policy.version, corrections=[]), None
+        scope_by_episode = {
+            str(episode.get("episode_id", "")): (
+                str(episode.get("environment_id", "")),
+                str(episode.get("task_type", "")),
+            )
+            for episode in window
+        }
+        correction_rows = []
+        for correction in corrections:
+            row = correction.to_dict()
+            environment_id, task_type = scope_by_episode.get(correction.episode_id, ("", ""))
+            row["environment_id"] = environment_id
+            row["task_type"] = task_type
+            correction_rows.append(row)
+        try:
+            patch = PolicyPatch.from_dict(_json_value(self.complete(
+                POLICY_SYSTEM,
+                policy_user_prompt(
+                    policy=policy.to_dict(),
+                    corrections=correction_rows,
+                    edit_budget=self.config.policy_max_edits,
+                    min_support=self.config.policy_min_support,
+                ),
+                max_tokens=self.config.policy_max_tokens,
+                stage="efm_policy_proposal",
+            )))
+        except Exception:
+            return PolicyUpdateDecision(False, "proposal_unavailable", policy.version, corrections=corrections), None
+        invalid_reason = validate_patch(
+            patch,
+            policy,
+            min_support=self.config.policy_min_support,
+            max_edits=self.config.policy_max_edits,
+        )
+        dropped_edits = []
+        if invalid_reason:
+            valid_edits = []
+            for index, edit in enumerate(patch.edits):
+                single = PolicyPatch(base_version=patch.base_version, edits=[edit], reasoning=patch.reasoning)
+                edit_reason = validate_patch(
+                    single,
+                    policy,
+                    min_support=self.config.policy_min_support,
+                    max_edits=1,
+                )
+                if edit_reason:
+                    dropped_edits.append({"index": index, "reason": edit_reason, "edit": edit})
+                    continue
+                valid_edits.append(edit)
+            if valid_edits:
+                patch = PolicyPatch(
+                    base_version=patch.base_version,
+                    edits=valid_edits[:self.config.policy_max_edits],
+                    reasoning=patch.reasoning,
+                )
+                invalid_reason = validate_patch(
+                    patch,
+                    policy,
+                    min_support=self.config.policy_min_support,
+                    max_edits=self.config.policy_max_edits,
+                )
+            if invalid_reason:
+                return PolicyUpdateDecision(
+                    False,
+                    invalid_reason,
+                    policy.version,
+                    corrections=corrections,
+                    candidate_patch=patch.to_dict(),
+                    gate_diagnostics={
+                        "mode": "not_run",
+                        "invalid_reason": invalid_reason,
+                        "dropped_edits": dropped_edits,
+                    },
+                ), None
+        candidate = apply_patch(
+            policy,
+            patch,
+            max_rules=self.config.policy_max_rules,
+            max_examples=self.config.policy_max_examples,
+        )
+        gate_reason = self._gate(candidate, window)
+        decision = PolicyUpdateDecision(
+            accepted=gate_reason == "accepted",
+            reason=gate_reason,
+            base_version=policy.version,
+            candidate_version=candidate.version if gate_reason == "accepted" else None,
+            corrections=corrections,
+            candidate_patch=patch.to_dict(),
+            gate_diagnostics={
+                **(getattr(self, "_last_gate_diagnostics", None) or {}),
+                **({"dropped_edits": dropped_edits} if dropped_edits else {}),
+            },
+        )
+        return decision, candidate if decision.accepted else None
+
+    def _gate(self, candidate: EFMPolicy, window: list[dict]) -> str:
+        self._last_gate_diagnostics = None
+        transitions = self._validation_transitions(window)
+        if len(transitions) < self.config.policy_validation_transitions:
+            return "insufficient_validation_transitions"
+        if self.config.policy_gate_mode == "llm":
+            return self._llm_gate(candidate, transitions)
+        return self._deterministic_gate(candidate, transitions)
+
+    def _validation_transitions(self, window: list[dict]) -> list[tuple[dict, dict]]:
+        transitions = []
+        for episode in window:
+            if episode.get("split") != "validation":
+                continue
+            for row in episode.get("trace", []):
+                transitions.append((episode, row))
+        return transitions[:self.config.policy_validation_transitions]
+
+    def _deterministic_gate(self, candidate: EFMPolicy, transitions: list[tuple[dict, dict]]) -> str:
+        baseline_totals = [0, 0, 0]
+        candidate_totals = [0, 0, 0]
+        for episode, row in transitions:
+            previous_actions = [item["action"] for item in episode.get("trace", [])[:int(row["step_id"])] ]
+            baseline = score_feedback(
+                row["step_feedback"],
+                action=row["action"],
+                raw_observation=row["raw_observation"],
+                recent_actions=previous_actions,
+                task_description=episode.get("task_description", ""),
+            )
+            candidate_feedback = self.render_candidate({"episode": episode, "row": row}, candidate)
+            candidate_quality = score_feedback(
+                candidate_feedback,
+                action=row["action"],
+                raw_observation=row["raw_observation"],
+                recent_actions=previous_actions,
+                task_description=episode.get("task_description", ""),
+            )
+            if candidate_quality.consistency == 0:
+                self._last_gate_diagnostics = {
+                    "mode": "deterministic",
+                    "transitions": len(transitions),
+                    "baseline_totals": {
+                        "consistency": baseline_totals[0],
+                        "completeness": baseline_totals[1],
+                        "efficiency": baseline_totals[2],
+                    },
+                    "candidate_totals": {
+                        "consistency": candidate_totals[0],
+                        "completeness": candidate_totals[1],
+                        "efficiency": candidate_totals[2],
+                    },
+                    "failed_transition": f"{episode.get('episode_id')}:{row.get('step_id')}",
+                    "failed_issues": candidate_quality.issues,
+                }
+                return "deterministic_quality_regressed"
+            for index, score in enumerate(baseline.as_tuple()):
+                baseline_totals[index] += score
+            for index, score in enumerate(candidate_quality.as_tuple()):
+                candidate_totals[index] += score
+
+        self._last_gate_diagnostics = {
+            "mode": "deterministic",
+            "transitions": len(transitions),
+            "baseline_totals": {
+                "consistency": baseline_totals[0],
+                "completeness": baseline_totals[1],
+                "efficiency": baseline_totals[2],
+            },
+            "candidate_totals": {
+                "consistency": candidate_totals[0],
+                "completeness": candidate_totals[1],
+                "efficiency": candidate_totals[2],
+            },
+        }
+        if any(candidate < baseline for candidate, baseline in zip(candidate_totals, baseline_totals)):
+            return "deterministic_quality_regressed"
+        if any(candidate > baseline for candidate, baseline in zip(candidate_totals, baseline_totals)):
+            return "accepted"
+        return "gate_not_improved"
+
+    def _llm_gate(self, candidate: EFMPolicy, transitions: list[tuple[dict, dict]]) -> str:
+        pairs = []
+        for episode, row in transitions:
+            candidate_feedback = self.render_candidate({"episode": episode, "row": row}, candidate)
+            pairs.append({
+                "id": f"{episode['episode_id']}:{row['step_id']}",
+                "task_description": _clip(episode.get("task_description", ""), 800),
+                "action": _clip(row["action"], 500),
+                "raw_observation": _clip(row["raw_observation"], 1_500),
+                "baseline_feedback": row["step_feedback"],
+                "candidate_feedback": candidate_feedback.to_dict(),
+            })
+        try:
+            result = _json_value(self.complete(
+                GATE_SYSTEM,
+                gate_user_prompt(transitions=pairs),
+                max_tokens=self.config.gate_max_tokens,
+                stage="efm_policy_gate",
+            ))
+            wins = _count(result.get("candidate_wins", []))
+            losses = _count(result.get("baseline_wins", []))
+            unsafe = result.get("unsafe_candidate_ids", [])
+            decisive = wins + losses
+            if unsafe:
+                return "unsafe_candidate_feedback"
+            if decisive == 0 or wins / decisive < self.config.policy_gate_min_win_rate or wins <= losses:
+                return "gate_not_improved"
+            return "accepted"
+        except Exception:
+            return "gate_unavailable"
+
+
+def _count(value: Any) -> int:
+    return len(value) if isinstance(value, list) else max(0, int(value or 0))
