@@ -78,6 +78,7 @@ def _user(instruction: str, apps: str, history: list[dict]) -> str:
 
 def run_appworld(items, skill, policy, max_steps, data_root, out_dir, vectors=None, alpha=1.0):
     old_cwd = os.getcwd()
+    out_dir = str(Path(out_dir).resolve())
     os.chdir(data_root)
     try:
         from appworld import AppWorld
