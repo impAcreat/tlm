@@ -100,9 +100,25 @@ def run_scienceworld(items, skill, policy, max_steps, simplification, out_dir, v
             "id": item["id"], "hard": int(score >= 100.0), "soft": max(0.0, score) / 100.0,
             "score": score, "task_type": item.get("task_type", item["task_name"]),
             "task_description": task, "trajectory": history, "prompt_records": prompt_records,
+            "n_turns": len(history),
+            "fail_reason": "" if score >= 100.0 else f"Ended with ScienceWorld score {score:g}",
         }
         results.append(row)
+        conversation = [
+            {
+                "step": idx,
+                "action": step["action"],
+                "reasoning": step["raw"],
+                "env_feedback": step["observation"],
+                "score": step["score"],
+            }
+            for idx, step in enumerate(history, 1)
+        ]
+        conv_dir = Path(out_dir) / "predictions" / str(item["id"])
+        conv_dir.mkdir(parents=True, exist_ok=True)
+        (conv_dir / "conversation.json").write_text(
+            json.dumps(conversation, ensure_ascii=False, indent=2)
+        )
     path = Path(out_dir) / "results.jsonl"
     path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in results))
     return results
-

@@ -111,11 +111,26 @@ def run_appworld(items, skill, policy, max_steps, data_root, out_dir, vectors=No
                 "soft": n_pass / n_tests if n_tests else 0.0, "task_type": item.get("task_type", "appworld"),
                 "task_description": instruction, "trajectory": history, "prompt_records": prompt_records,
                 "num_tests": n_tests, "num_passed": n_pass,
+                "n_turns": len(history),
+                "fail_reason": "" if report.get("success") else json.dumps(report.get("failures") or [], ensure_ascii=False),
             }
             results.append(row)
+            conversation = [
+                {
+                    "step": idx,
+                    "action": step["code"],
+                    "reasoning": step["raw"],
+                    "env_feedback": step["output"],
+                }
+                for idx, step in enumerate(history, 1)
+            ]
+            conv_dir = Path(out_dir) / "predictions" / str(item["id"])
+            conv_dir.mkdir(parents=True, exist_ok=True)
+            (conv_dir / "conversation.json").write_text(
+                json.dumps(conversation, ensure_ascii=False, indent=2)
+            )
         path = Path(out_dir) / "results.jsonl"
         path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in results))
         return results
     finally:
         os.chdir(old_cwd)
-
