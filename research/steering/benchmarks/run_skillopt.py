@@ -22,9 +22,12 @@ def main() -> None:
     assert spec.loader is not None
     spec.loader.exec_module(module)
     module._ENV_REGISTRY.update({"scienceworld": ScienceWorldAdapter, "appworld": AppWorldAdapter})
+    # The custom pilots do not need SkillOpt's optional benchmark adapters.
+    # Skipping their eager imports avoids pulling every vision backend into an
+    # otherwise text-only AppWorld/ScienceWorld run.
+    module._register_builtins = lambda: None
     module.main()
 
 
 if __name__ == "__main__":
     main()
-
