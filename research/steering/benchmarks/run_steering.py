@@ -97,7 +97,7 @@ def main() -> None:
         "stop_steer_score": args.stop_steer_score,
         "knn_k": args.knn_k,
         "knn_temperature": args.knn_temperature,
-        "geometry": {k: v for k, v in artifact.items() if k != "vectors"},
+        "geometry": {k: v for k, v in artifact.items() if k not in {"vectors", "state_bank"}},
         "arms": {},
     }
     rows_by_arm = {}
