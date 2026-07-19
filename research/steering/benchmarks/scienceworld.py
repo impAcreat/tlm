@@ -69,7 +69,17 @@ def _user(task: str, observation: str, history: list[dict], valid: list[str]) ->
     return f"Task: {task}\n\nRecent history:\n{transcript or '(none)'}\n\nCurrent observation:\n{observation}\n\nValid actions:\n{actions}"
 
 
-def run_scienceworld(items, skill, policy, max_steps, simplification, out_dir, vectors=None, alpha=1.0):
+def run_scienceworld(
+    items,
+    skill,
+    policy,
+    max_steps,
+    simplification,
+    out_dir,
+    vectors=None,
+    alpha=1.0,
+    steer_mode="gen",
+):
     from scienceworld import ScienceWorldEnv
 
     Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -87,11 +97,22 @@ def run_scienceworld(items, skill, policy, max_steps, simplification, out_dir, v
                 valid = [x["action"] for x in env.get_valid_action_object_combinations_with_templates()]
                 user = _user(task, observation, history, valid)
                 prompt_records.append({"base_system": SYSTEM, "user": user})
-                raw = policy.generate(SYSTEM, user, skill, vectors=vectors, alpha=alpha)
+                raw = policy.generate(
+                    SYSTEM, user, skill, vectors=vectors, alpha=alpha, steer_mode=steer_mode
+                )
                 action = extract_tag(raw, "action").lower().strip()
+                is_valid = action in valid
                 observation, _reward, done, info = env.step(action)
                 score = float(info.get("score", score))
-                history.append({"action": action, "raw": raw, "observation": observation, "score": score})
+                history.append(
+                    {
+                        "action": action,
+                        "raw": raw,
+                        "observation": observation,
+                        "score": score,
+                        "is_valid": is_valid,
+                    }
+                )
                 if done:
                     break
         finally:

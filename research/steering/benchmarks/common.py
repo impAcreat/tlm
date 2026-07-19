@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from itertools import zip_longest
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,6 +26,30 @@ class GenOnlyMultiLayerSteerer(MultiLayerActivationSteerer):
         if hidden.shape[1] > 1:
             return hidden
         return super()._steer_hidden(hidden, vector)
+
+
+class PrefillLastMultiLayerSteerer(MultiLayerActivationSteerer):
+    """Steer only the final prompt token; leave cached context and decode tokens intact."""
+
+    def _steer_hidden(self, hidden: torch.Tensor, vector: torch.Tensor) -> torch.Tensor:
+        if hidden.shape[1] == 1:
+            return hidden
+        vector = vector.to(device=hidden.device, dtype=hidden.dtype)
+        steered = hidden.clone()
+        steered[:, -1, :] += self.alpha * vector.view(1, -1)
+        return steered
+
+
+class PrefillLastAndGenMultiLayerSteerer(MultiLayerActivationSteerer):
+    """Steer the decision token at prefill and every subsequent decode token."""
+
+    def _steer_hidden(self, hidden: torch.Tensor, vector: torch.Tensor) -> torch.Tensor:
+        if hidden.shape[1] == 1:
+            return super()._steer_hidden(hidden, vector)
+        vector = vector.to(device=hidden.device, dtype=hidden.dtype)
+        steered = hidden.clone()
+        steered[:, -1, :] += self.alpha * vector.view(1, -1)
+        return steered
 
 
 @dataclass
@@ -62,6 +87,7 @@ class HFSkillPolicy:
         *,
         vectors: dict[int, torch.Tensor] | None = None,
         alpha: float = 1.0,
+        steer_mode: str = "gen",
     ) -> str:
         self.ensure_loaded()
         ids = self._ids(system_with_skill(base_system, skill), user)
@@ -74,7 +100,15 @@ class HFSkillPolicy:
             eos_token_id=self.tokenizer.eos_token_id,
         )
         if vectors:
-            with GenOnlyMultiLayerSteerer(self.model, vectors=vectors, alpha=alpha):
+            steerers = {
+                "gen": GenOnlyMultiLayerSteerer,
+                "prefill_last": PrefillLastMultiLayerSteerer,
+                "prefill_last_gen": PrefillLastAndGenMultiLayerSteerer,
+                "all": MultiLayerActivationSteerer,
+            }
+            if steer_mode not in steerers:
+                raise ValueError(f"unknown steer_mode: {steer_mode}")
+            with steerers[steer_mode](self.model, vectors=vectors, alpha=alpha):
                 out = self.model.generate(**kwargs)
         else:
             out = self.model.generate(**kwargs)
@@ -144,9 +178,13 @@ def load_results(path: str | Path) -> list[dict]:
 
 
 def collect_prompt_records(results: list[dict], limit: int) -> list[dict]:
+    # Round-robin over episodes.  The old implementation exhausted episode 0
+    # first, which confounded the vector with one variation and early trajectory
+    # phases when ``limit`` was small.
+    episodes = [result.get("prompt_records") or [] for result in results]
     rows = []
-    for result in results:
-        rows.extend(result.get("prompt_records") or [])
+    for step_records in zip_longest(*episodes):
+        rows.extend(row for row in step_records if row is not None)
         if len(rows) >= limit:
             break
     return rows[:limit]
@@ -155,4 +193,3 @@ def collect_prompt_records(results: list[dict], limit: int) -> list[dict]:
 def extract_tag(text: str, tag: str) -> str:
     match = re.search(rf"<{tag}>\s*(.*?)\s*</{tag}>", text or "", re.I | re.S)
     return match.group(1).strip() if match else (text or "").strip().splitlines()[0].strip()
-

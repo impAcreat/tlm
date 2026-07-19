@@ -1,0 +1,8 @@
+[
+  {"id": "boil-6", "task_name": "boil", "variation": 6, "task_type": "boil"},
+  {"id": "boil-7", "task_name": "boil", "variation": 7, "task_type": "boil"},
+  {"id": "boil-8", "task_name": "boil", "variation": 8, "task_type": "boil"},
+  {"id": "boil-9", "task_name": "boil", "variation": 9, "task_type": "boil"},
+  {"id": "boil-10", "task_name": "boil", "variation": 10, "task_type": "boil"},
+  {"id": "boil-11", "task_name": "boil", "variation": 11, "task_type": "boil"}
+]
