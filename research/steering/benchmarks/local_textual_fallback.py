@@ -29,13 +29,16 @@ def main() -> None:
     parser.add_argument("--device", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--max-chars", type=int, default=30000)
+    parser.add_argument("--max-new-tokens", type=int, default=768)
     args = parser.parse_args()
 
     results = [json.loads(line) for line in Path(args.results).read_text().splitlines() if line.strip()]
     trajectories = fmt_minibatch_trajectories(results, args.prediction_dir)[: args.max_chars]
     current = Path(args.current_skill).read_text()
     user = f"## Current Skill\n{current}\n\n## Rollout Trajectories\n{trajectories}"
-    policy = HFSkillPolicy(str(Path(args.model_path).resolve()), args.device, max_new_tokens=384)
+    policy = HFSkillPolicy(
+        str(Path(args.model_path).resolve()), args.device, max_new_tokens=args.max_new_tokens
+    )
     skill = policy.generate(SYSTEM, user, "")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
