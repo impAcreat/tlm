@@ -26,14 +26,14 @@ def main() -> None:
     p.add_argument("--device", required=True)
     p.add_argument("--bad-skill", required=True)
     p.add_argument("--good-skill", required=True)
-    p.add_argument("--source-results", required=True)
+    p.add_argument("--source-results", nargs="+", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--state-limit", type=int, default=120)
     p.add_argument("--max-step-per-episode", type=int, default=0)
     p.add_argument("--layers", default="8,10,12,14,16,18,20,22,24,26,28")
     args = p.parse_args()
 
-    source = load_results(args.source_results)
+    source = [row for path in args.source_results for row in load_results(path)]
     if args.max_step_per_episode:
         source = [
             {**row, "prompt_records": (row.get("prompt_records") or [])[: args.max_step_per_episode]}
