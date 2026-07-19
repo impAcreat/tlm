@@ -102,7 +102,13 @@ def run_scienceworld(
             score = float(info.get("score", 0.0))
             done = False
             for _step in range(max_steps):
-                valid = [x["action"] for x in env.get_valid_action_object_combinations_with_templates()]
+                # ScienceWorld's Java-side collection order varies across fresh
+                # environments.  Sorting makes semantically identical states
+                # produce identical prompts instead of changing greedy policy
+                # decisions through arbitrary action-list permutations.
+                valid = sorted(
+                    {x["action"] for x in env.get_valid_action_object_combinations_with_templates()}
+                )
                 user = _user(task, observation, history, valid)
                 prompt_records.append({"base_system": SYSTEM, "user": user})
                 active_vectors = vectors

@@ -43,6 +43,20 @@ def _paired_stats(ref: dict[str, dict], arm: dict[str, dict], seed: int) -> dict
     }
 
 
+def _behavior(rows: dict[str, dict]) -> dict:
+    steps = [step for row in rows.values() for step in row["trajectory"]]
+    repeats = opportunities = 0
+    for row in rows.values():
+        actions = [step["action"] for step in row["trajectory"]]
+        repeats += sum(a == b for a, b in zip(actions[1:], actions[:-1]))
+        opportunities += max(0, len(actions) - 1)
+    return {
+        "invalid_rate": sum(not step.get("is_valid", True) for step in steps) / max(1, len(steps)),
+        "repeat_rate": repeats / max(1, opportunities),
+        "mean_steps": len(steps) / max(1, len(rows)),
+    }
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--arms", nargs="+", required=True, help="name=run_dir")
@@ -58,6 +72,7 @@ def main() -> None:
             "n": len(rows),
             "hard": sum(row["hard"] for row in rows.values()),
             "soft_mean": sum(row["soft"] for row in rows.values()) / len(rows),
+            **_behavior(rows),
         }
         if name != args.reference:
             summary["arms"][name]["paired_vs_reference"] = _paired_stats(ref, rows, args.seed)

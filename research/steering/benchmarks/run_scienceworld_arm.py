@@ -32,7 +32,7 @@ def main() -> None:
     p.add_argument("--skill", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--device", required=True)
-    p.add_argument("--eval-split", choices=["val", "test"], default="test")
+    p.add_argument("--eval-split", choices=["train", "val", "test"], default="test")
     p.add_argument("--eval-num", type=int, required=True)
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--vector-path", default="")
@@ -56,7 +56,10 @@ def main() -> None:
         args.split_dir, args.model_path, args.device, args.max_steps
     )
     adapter.setup({})
-    items = adapter.build_eval_env(args.eval_num, args.eval_split, args.seed)
+    if args.eval_split == "train":
+        items = adapter.build_train_env(args.eval_num, args.seed)
+    else:
+        items = adapter.build_eval_env(args.eval_num, args.eval_split, args.seed)
     vectors = None
     state_bank = None
     if args.vector_path:
