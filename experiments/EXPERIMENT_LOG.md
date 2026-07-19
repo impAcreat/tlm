@@ -1676,3 +1676,33 @@ Evidence boundary:
   a stronger protocol unit (e.g., step-3 edit #0 or a slow-update block) is the next candidate.
 - Teacher-forced test only probes step-0 single responses; a per-step version along full trajectories
   would localize where the likelihood benefit emerges.
+
+## 2026-07-19 ScienceWorld powered steering adjustment
+
+Protocol: all 30 `boil` variations with fixed train/val/test = 6/6/18, easy mode,
+Qwen3.5-4B greedy, 20 steps. Extraction used 180 states from 18 train-only
+trajectories (bad/full/parser skills). A ScienceWorld adapter bug was fixed:
+valid actions were returned in unstable object order and truncated in-prompt;
+the adapter now preserves verb-group order and sorts within groups.
+
+Stable held-out text result: initial 0.0089 vs full SkillOpt text 0.0428
+(+0.0339). The earlier n=3 estimate 0.0067 vs 0.1233 was inflated by action-order
+noise and is retired.
+
+Frozen steering results (n=18):
+- Full good-minus-initial L14 prefill-last+gen: 0.0089 vs initial 0.0089;
+  matched random 0.0100. It changed 10/18 trajectories but 0/18 scores.
+- Boiling-component (full minus parser-only) L14 prefill-last+gen: 0.0022 vs
+  parser-only 0.0011 and full text 0.0428. Four extra random controls span
+  0.0011--0.0022, so the tiny gain is not direction-specific.
+- Exact online current-state delta, state-conditioned kNN, step gating,
+  early-only extraction, and shallow multi-layer injection did not beat the
+  frozen textual/control boundary. The best multi-layer validation arm merely
+  tied single-layer L14 at 0.0233, so it was not evaluated on test.
+
+Conclusion: the vector is coherent and behaviorally causal, but static additive
+last-token residual steering does not transfer the procedural text benefit.
+Next architecture-level test should target prompt KV/attention state or a
+learned distributed adapter, not more static alpha/layer sweeps. Full report:
+`experiments/STEERING_SCIWORLD_ADJUSTMENT_20260719.md`; artifacts under
+`outputs/steering_scienceworld_stable/`.
