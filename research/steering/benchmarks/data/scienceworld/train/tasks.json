@@ -1,0 +1,8 @@
+[
+  {"id":"boil-0","task_name":"boil","variation":0,"task_type":"boil"},
+  {"id":"boil-1","task_name":"boil","variation":1,"task_type":"boil"},
+  {"id":"boil-2","task_name":"boil","variation":2,"task_type":"boil"},
+  {"id":"boil-3","task_name":"boil","variation":3,"task_type":"boil"},
+  {"id":"boil-4","task_name":"boil","variation":4,"task_type":"boil"},
+  {"id":"boil-5","task_name":"boil","variation":5,"task_type":"boil"}
+]
