@@ -13,7 +13,7 @@ optimizer:
   lr_scheduler: constant
   use_slow_update: false
   use_meta_skill: false
-evaluation: {use_gate: true, sel_env_num: 3, test_env_num: 3, eval_test: true}
+evaluation: {use_gate: true, gate_metric: soft, sel_env_num: 3, test_env_num: 3, eval_test: true}
 env:
   name: scienceworld
   skill_init: research/steering/benchmarks/skills/scienceworld_initial.md
@@ -23,4 +23,3 @@ env:
   max_steps: 20
   simplification: easy
   out_root: outputs/skillopt_scienceworld_light
-
