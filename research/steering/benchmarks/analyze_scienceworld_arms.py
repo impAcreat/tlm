@@ -21,7 +21,9 @@ def _quantile(values: list[float], q: float) -> float:
 
 def _paired_stats(ref: dict[str, dict], arm: dict[str, dict], seed: int) -> dict:
     ids = sorted(set(ref) & set(arm))
-    deltas = [(arm[i]["score"] - ref[i]["score"]) / 100.0 for i in ids]
+    # Match the benchmark metric: ScienceWorld terminal failures can report
+    # negative raw scores, while the adapter's soft metric clamps them to zero.
+    deltas = [arm[i]["soft"] - ref[i]["soft"] for i in ids]
     rng = random.Random(seed)
     boot = [sum(rng.choice(deltas) for _ in deltas) / len(deltas) for _ in range(20000)]
     observed = abs(sum(deltas) / len(deltas))

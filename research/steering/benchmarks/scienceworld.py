@@ -79,6 +79,8 @@ def run_scienceworld(
     vectors=None,
     alpha=1.0,
     steer_mode="gen",
+    steer_steps=0,
+    stop_steer_score=101.0,
 ):
     from scienceworld import ScienceWorldEnv
 
@@ -97,8 +99,18 @@ def run_scienceworld(
                 valid = [x["action"] for x in env.get_valid_action_object_combinations_with_templates()]
                 user = _user(task, observation, history, valid)
                 prompt_records.append({"base_system": SYSTEM, "user": user})
+                active_vectors = vectors
+                if steer_steps and _step >= steer_steps:
+                    active_vectors = None
+                if score >= stop_steer_score:
+                    active_vectors = None
                 raw = policy.generate(
-                    SYSTEM, user, skill, vectors=vectors, alpha=alpha, steer_mode=steer_mode
+                    SYSTEM,
+                    user,
+                    skill,
+                    vectors=active_vectors,
+                    alpha=alpha,
+                    steer_mode=steer_mode,
                 )
                 action = extract_tag(raw, "action").lower().strip()
                 is_valid = action in valid

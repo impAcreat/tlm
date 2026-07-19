@@ -29,10 +29,16 @@ def main() -> None:
     p.add_argument("--source-results", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--state-limit", type=int, default=120)
+    p.add_argument("--max-step-per-episode", type=int, default=0)
     p.add_argument("--layers", default="8,10,12,14,16,18,20,22,24,26,28")
     args = p.parse_args()
 
     source = load_results(args.source_results)
+    if args.max_step_per_episode:
+        source = [
+            {**row, "prompt_records": (row.get("prompt_records") or [])[: args.max_step_per_episode]}
+            for row in source
+        ]
     prompts = collect_prompt_records(source, args.state_limit)
     layers = [int(x) for x in args.layers.split(",")]
     policy = HFSkillPolicy(str(Path(args.model_path).resolve()), args.device, 64)
@@ -45,6 +51,7 @@ def main() -> None:
     )
     artifact["sampling"] = "round_robin_episode_then_step"
     artifact["source_episodes"] = len(source)
+    artifact["max_step_per_episode"] = args.max_step_per_episode
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(artifact, out / "skill_vectors.pt")

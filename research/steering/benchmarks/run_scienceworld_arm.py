@@ -44,6 +44,8 @@ def main() -> None:
         default="gen",
     )
     p.add_argument("--alpha", type=float, default=1.0)
+    p.add_argument("--steer-steps", type=int, default=0)
+    p.add_argument("--stop-steer-score", type=float, default=101.0)
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
 
@@ -74,6 +76,8 @@ def main() -> None:
         vectors=vectors,
         alpha=args.alpha,
         steer_mode=args.steer_mode,
+        steer_steps=args.steer_steps,
+        stop_steer_score=args.stop_steer_score,
     )
     steps = [step for row in rows for step in row["trajectory"]]
     summary = {
@@ -90,6 +94,8 @@ def main() -> None:
         "steer_mode": args.steer_mode,
         "alpha": args.alpha,
         "random_vector": args.random_vector,
+        "steer_steps": args.steer_steps,
+        "stop_steer_score": args.stop_steer_score,
     }
     Path(args.out_dir, "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

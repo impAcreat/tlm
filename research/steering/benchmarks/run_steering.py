@@ -33,6 +33,13 @@ def main() -> None:
     p.add_argument("--state-limit", type=int, default=18)
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--alpha", type=float, default=1.0)
+    p.add_argument("--layers", default="14,18,22")
+    p.add_argument("--steer-mode", choices=["gen", "prefill_last", "prefill_last_gen", "all"], default="gen")
+    p.add_argument("--eval-split", choices=["val", "test"], default="test")
+    p.add_argument("--eval-num", type=int, default=3)
+    p.add_argument("--vector-path", default="")
+    p.add_argument("--steer-steps", type=int, default=0)
+    p.add_argument("--stop-steer-score", type=float, default=101.0)
     args = p.parse_args()
 
     bad = Path(args.bad_skill).read_text()
@@ -44,11 +51,18 @@ def main() -> None:
     else:
         adapter = AppWorldAdapter(args.split_dir, args.model_path, args.data_root, args.device, args.max_steps)
     adapter.setup({})
-    artifact = extract_prompt_vectors(adapter.policy, prompts, bad, good, [14, 18, 22])
+    layers = [int(x) for x in args.layers.split(",")]
+    if args.vector_path:
+        artifact = torch.load(args.vector_path, map_location="cpu", weights_only=False)
+        artifact["vectors"] = {
+            int(k): v for k, v in artifact["vectors"].items() if int(k) in set(layers)
+        }
+    else:
+        artifact = extract_prompt_vectors(adapter.policy, prompts, bad, good, layers)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(artifact, out / "skill_vectors.pt")
-    items = adapter.build_eval_env(3, "test", 42)
+    items = adapter.build_eval_env(args.eval_num, args.eval_split, 42)
 
     arms = {
         "bad": None,
@@ -59,6 +73,10 @@ def main() -> None:
     summary = {
         "num_extraction_states": len(prompts),
         "alpha": args.alpha,
+        "steer_mode": args.steer_mode,
+        "eval_split": args.eval_split,
+        "steer_steps": args.steer_steps,
+        "stop_steer_score": args.stop_steer_score,
         "geometry": {k: v for k, v in artifact.items() if k != "vectors"},
         "arms": {},
     }
@@ -69,7 +87,12 @@ def main() -> None:
         if args.benchmark == "scienceworld":
             rows = run_scienceworld(
                 items, skill, adapter.policy, args.max_steps, adapter.simplification,
-                arm_dir, vectors=vectors, alpha=args.alpha,
+                arm_dir,
+                vectors=vectors,
+                alpha=args.alpha,
+                steer_mode=args.steer_mode,
+                steer_steps=args.steer_steps,
+                stop_steer_score=args.stop_steer_score,
             )
         else:
             rows = run_appworld(
