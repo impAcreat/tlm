@@ -32,6 +32,7 @@ def main() -> None:
     p.add_argument("--data-root", default="")
     p.add_argument("--state-limit", type=int, default=18)
     p.add_argument("--max-steps", type=int, default=20)
+    p.add_argument("--alpha", type=float, default=1.0)
     args = p.parse_args()
 
     bad = Path(args.bad_skill).read_text()
@@ -50,22 +51,52 @@ def main() -> None:
     items = adapter.build_eval_env(3, "test", 42)
 
     arms = {"bad": None, "good": "good", "steered": artifact["vectors"], "random": random_matched_vectors(artifact["vectors"])}
-    summary = {"num_extraction_states": len(prompts), "geometry": {k: v for k, v in artifact.items() if k != "vectors"}, "arms": {}}
+    summary = {
+        "num_extraction_states": len(prompts),
+        "alpha": args.alpha,
+        "geometry": {k: v for k, v in artifact.items() if k != "vectors"},
+        "arms": {},
+    }
+    rows_by_arm = {}
     for name, vectors in arms.items():
         skill = good if name == "good" else bad
         arm_dir = out / name
         if args.benchmark == "scienceworld":
-            rows = run_scienceworld(items, skill, adapter.policy, args.max_steps, adapter.simplification, arm_dir, vectors=vectors)
+            rows = run_scienceworld(
+                items, skill, adapter.policy, args.max_steps, adapter.simplification,
+                arm_dir, vectors=vectors, alpha=args.alpha,
+            )
         else:
-            rows = run_appworld(items, skill, adapter.policy, args.max_steps, adapter.data_root, arm_dir, vectors=vectors)
+            rows = run_appworld(
+                items, skill, adapter.policy, args.max_steps, adapter.data_root,
+                arm_dir, vectors=vectors, alpha=args.alpha,
+            )
+        rows_by_arm[name] = rows
         summary["arms"][name] = {
             "n": len(rows), "hard": sum(x["hard"] for x in rows),
             "soft_mean": sum(x["soft"] for x in rows) / max(1, len(rows)),
+            "mean_steps": sum(len(x["trajectory"]) for x in rows) / max(1, len(rows)),
         }
+    bad_by_id = {row["id"]: row for row in rows_by_arm["bad"]}
+    behavior = {}
+    key = "action" if args.benchmark == "scienceworld" else "code"
+    for name in ("good", "steered", "random"):
+        changed = first_changed = 0
+        for row in rows_by_arm[name]:
+            bad = bad_by_id[row["id"]]
+            seq = [step.get(key, "") for step in row["trajectory"]]
+            bad_seq = [step.get(key, "") for step in bad["trajectory"]]
+            changed += int(seq != bad_seq)
+            first_changed += int(bool(seq and bad_seq and seq[0] != bad_seq[0]))
+        n = max(1, len(rows_by_arm[name]))
+        behavior[name] = {
+            "trajectory_change_rate_vs_bad": changed / n,
+            "first_decision_change_rate_vs_bad": first_changed / n,
+        }
+    summary["behavior_vs_bad"] = behavior
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
     main()
-
