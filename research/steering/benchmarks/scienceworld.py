@@ -72,6 +72,16 @@ def _user(task: str, observation: str, history: list[dict], valid: list[str]) ->
     return f"Task: {task}\n\nRecent history:\n{transcript or '(none)'}\n\nCurrent observation:\n{observation}\n\nValid actions:\n{actions}"
 
 
+def _stable_valid_actions(rows: list[dict]) -> list[str]:
+    """Preserve ScienceWorld's template/verb order but stabilize object order."""
+    groups: dict[str, list[str]] = {}
+    for row in rows:
+        action = row["action"]
+        verb = action.split(maxsplit=1)[0]
+        groups.setdefault(verb, []).append(action)
+    return [action for actions in groups.values() for action in sorted(set(actions))]
+
+
 def run_scienceworld(
     items,
     skill,
@@ -102,12 +112,12 @@ def run_scienceworld(
             score = float(info.get("score", 0.0))
             done = False
             for _step in range(max_steps):
-                # ScienceWorld's Java-side collection order varies across fresh
-                # environments.  Sorting makes semantically identical states
-                # produce identical prompts instead of changing greedy policy
-                # decisions through arbitrary action-list permutations.
-                valid = sorted(
-                    {x["action"] for x in env.get_valid_action_object_combinations_with_templates()}
+                # The Java object order varies across fresh environments, while
+                # the action-template order is stable and behaviorally important.
+                # Sort only within each verb group so the prompt is reproducible
+                # without changing the benchmark's coarse action ordering.
+                valid = _stable_valid_actions(
+                    env.get_valid_action_object_combinations_with_templates()
                 )
                 user = _user(task, observation, history, valid)
                 prompt_records.append({"base_system": SYSTEM, "user": user})
