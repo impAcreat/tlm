@@ -35,7 +35,7 @@ class AppWorldAdapter(EnvAdapter):
     ) -> None:
         self.data_root = str(Path(data_root).resolve())
         self.dataloader = JsonSplitLoader(split_dir=split_dir, split_mode="split_dir", seed=42)
-        self.policy = HFSkillPolicy(model_path, device, max_new_tokens)
+        self.policy = HFSkillPolicy(str(Path(model_path).resolve()), device, max_new_tokens)
         self.max_steps = int(max_steps)
         self.analyst_workers = analyst_workers
         self.failure_only = failure_only
