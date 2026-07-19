@@ -48,6 +48,7 @@ def main() -> None:
         Path(args.bad_skill).read_text(),
         Path(args.good_skill).read_text(),
         layers,
+        keep_state_bank=True,
     )
     artifact["sampling"] = "round_robin_episode_then_step"
     artifact["source_episodes"] = len(source)

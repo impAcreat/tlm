@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import torch
+import torch.nn.functional as F
+
 from skillopt.datasets.base import BatchSpec
 from skillopt.envs.base import EnvAdapter
 
@@ -81,6 +84,9 @@ def run_scienceworld(
     steer_mode="gen",
     steer_steps=0,
     stop_steer_score=101.0,
+    state_bank=None,
+    knn_k=0,
+    knn_temperature=0.1,
 ):
     from scienceworld import ScienceWorldEnv
 
@@ -104,6 +110,18 @@ def run_scienceworld(
                     active_vectors = None
                 if score >= stop_steer_score:
                     active_vectors = None
+                if active_vectors and state_bank and knn_k:
+                    current = policy.last_token_layers(SYSTEM, user, skill)
+                    dynamic = {}
+                    for layer in active_vectors:
+                        bank = state_bank[int(layer)]
+                        query = current[int(layer)].float()
+                        similarities = F.cosine_similarity(bank["bad"].float(), query.unsqueeze(0), dim=1)
+                        k = min(int(knn_k), len(similarities))
+                        values, indices = torch.topk(similarities, k)
+                        weights = torch.softmax(values / float(knn_temperature), dim=0)
+                        dynamic[int(layer)] = (weights[:, None] * bank["delta"][indices].float()).sum(0)
+                    active_vectors = dynamic
                 raw = policy.generate(
                     SYSTEM,
                     user,

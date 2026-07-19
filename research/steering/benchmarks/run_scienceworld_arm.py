@@ -46,6 +46,9 @@ def main() -> None:
     p.add_argument("--alpha", type=float, default=1.0)
     p.add_argument("--steer-steps", type=int, default=0)
     p.add_argument("--stop-steer-score", type=float, default=101.0)
+    p.add_argument("--knn-k", type=int, default=0)
+    p.add_argument("--knn-temperature", type=float, default=0.1)
+    p.add_argument("--shuffle-state-bank", action="store_true")
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
 
@@ -55,9 +58,11 @@ def main() -> None:
     adapter.setup({})
     items = adapter.build_eval_env(args.eval_num, args.eval_split, args.seed)
     vectors = None
+    state_bank = None
     if args.vector_path:
         artifact = torch.load(args.vector_path, map_location="cpu", weights_only=False)
         vectors = artifact.get("vectors", artifact)
+        state_bank = artifact.get("state_bank")
         if args.layers:
             selected = {int(x) for x in args.layers.split(",")}
             vectors = {int(k): v for k, v in vectors.items() if int(k) in selected}
@@ -65,6 +70,13 @@ def main() -> None:
                 raise ValueError(f"missing requested layers: {sorted(selected - set(vectors))}")
         if args.random_vector:
             vectors = random_matched_vectors(vectors, seed=args.seed)
+            state_bank = None
+        elif args.shuffle_state_bank and state_bank:
+            generator = torch.Generator().manual_seed(args.seed)
+            state_bank = {
+                layer: {**bank, "delta": bank["delta"][torch.randperm(len(bank["delta"]), generator=generator)]}
+                for layer, bank in state_bank.items()
+            }
 
     rows = run_scienceworld(
         items,
@@ -78,6 +90,9 @@ def main() -> None:
         steer_mode=args.steer_mode,
         steer_steps=args.steer_steps,
         stop_steer_score=args.stop_steer_score,
+        state_bank=state_bank,
+        knn_k=args.knn_k,
+        knn_temperature=args.knn_temperature,
     )
     steps = [step for row in rows for step in row["trajectory"]]
     summary = {
@@ -96,6 +111,9 @@ def main() -> None:
         "random_vector": args.random_vector,
         "steer_steps": args.steer_steps,
         "stop_steer_score": args.stop_steer_score,
+        "knn_k": args.knn_k,
+        "knn_temperature": args.knn_temperature,
+        "shuffle_state_bank": args.shuffle_state_bank,
     }
     Path(args.out_dir, "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

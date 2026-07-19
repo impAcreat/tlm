@@ -40,6 +40,8 @@ def main() -> None:
     p.add_argument("--vector-path", default="")
     p.add_argument("--steer-steps", type=int, default=0)
     p.add_argument("--stop-steer-score", type=float, default=101.0)
+    p.add_argument("--knn-k", type=int, default=0)
+    p.add_argument("--knn-temperature", type=float, default=0.1)
     args = p.parse_args()
 
     bad = Path(args.bad_skill).read_text()
@@ -57,6 +59,10 @@ def main() -> None:
         artifact["vectors"] = {
             int(k): v for k, v in artifact["vectors"].items() if int(k) in set(layers)
         }
+        if artifact.get("state_bank"):
+            artifact["state_bank"] = {
+                int(k): v for k, v in artifact["state_bank"].items() if int(k) in set(layers)
+            }
     else:
         artifact = extract_prompt_vectors(adapter.policy, prompts, bad, good, layers)
     out = Path(args.out_dir)
@@ -64,11 +70,23 @@ def main() -> None:
     torch.save(artifact, out / "skill_vectors.pt")
     items = adapter.build_eval_env(args.eval_num, args.eval_split, 42)
 
+    random_vectors = random_matched_vectors(artifact["vectors"])
+    state_banks = {"steered": artifact.get("state_bank")}
+    if args.knn_k and artifact.get("state_bank"):
+        generator = torch.Generator().manual_seed(7)
+        state_banks["random"] = {
+            layer: {
+                **bank,
+                "delta": bank["delta"][torch.randperm(len(bank["delta"]), generator=generator)],
+            }
+            for layer, bank in artifact["state_bank"].items()
+        }
+        random_vectors = artifact["vectors"]
     arms = {
         "bad": None,
         "good": None,
         "steered": artifact["vectors"],
-        "random": random_matched_vectors(artifact["vectors"]),
+        "random": random_vectors,
     }
     summary = {
         "num_extraction_states": len(prompts),
@@ -77,6 +95,8 @@ def main() -> None:
         "eval_split": args.eval_split,
         "steer_steps": args.steer_steps,
         "stop_steer_score": args.stop_steer_score,
+        "knn_k": args.knn_k,
+        "knn_temperature": args.knn_temperature,
         "geometry": {k: v for k, v in artifact.items() if k != "vectors"},
         "arms": {},
     }
@@ -93,6 +113,9 @@ def main() -> None:
                 steer_mode=args.steer_mode,
                 steer_steps=args.steer_steps,
                 stop_steer_score=args.stop_steer_score,
+                state_bank=state_banks.get(name),
+                knn_k=args.knn_k,
+                knn_temperature=args.knn_temperature,
             )
         else:
             rows = run_appworld(

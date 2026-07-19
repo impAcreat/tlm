@@ -133,15 +133,19 @@ def extract_prompt_vectors(
     bad_skill: str,
     good_skill: str,
     layers: list[int],
+    keep_state_bank: bool = False,
 ) -> dict:
     deltas = []
+    bad_states = []
     for row in prompt_records:
         bad = policy.last_token_layers(row["base_system"], row["user"], bad_skill)
         good = policy.last_token_layers(row["base_system"], row["user"], good_skill)
+        bad_states.append(bad)
         deltas.append(good - bad)
     stacked = torch.stack(deltas)
+    bad_stacked = torch.stack(bad_states)
     means = stacked.mean(0)
-    return {
+    artifact = {
         "vectors": {int(layer): means[layer] for layer in layers},
         "layers": layers,
         "num_states": len(prompt_records),
@@ -150,6 +154,12 @@ def extract_prompt_vectors(
             str(layer): _mean_pairwise_cos(stacked[:, layer]) for layer in layers
         },
     }
+    if keep_state_bank:
+        artifact["state_bank"] = {
+            int(layer): {"bad": bad_stacked[:, layer], "delta": stacked[:, layer]}
+            for layer in layers
+        }
+    return artifact
 
 
 def _mean_pairwise_cos(x: torch.Tensor) -> float:
