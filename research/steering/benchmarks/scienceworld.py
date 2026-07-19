@@ -97,6 +97,7 @@ def run_scienceworld(
     state_bank=None,
     knn_k=0,
     knn_temperature=0.1,
+    online_good_skill=None,
 ):
     from scienceworld import ScienceWorldEnv
 
@@ -138,6 +139,13 @@ def run_scienceworld(
                         weights = torch.softmax(values / float(knn_temperature), dim=0)
                         dynamic[int(layer)] = (weights[:, None] * bank["delta"][indices].float()).sum(0)
                     active_vectors = dynamic
+                if active_vectors and online_good_skill is not None:
+                    bad_state = policy.last_token_layers(SYSTEM, user, skill)
+                    good_state = policy.last_token_layers(SYSTEM, user, online_good_skill)
+                    active_vectors = {
+                        int(layer): good_state[int(layer)] - bad_state[int(layer)]
+                        for layer in active_vectors
+                    }
                 raw = policy.generate(
                     SYSTEM,
                     user,

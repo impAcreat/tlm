@@ -49,6 +49,7 @@ def main() -> None:
     p.add_argument("--knn-k", type=int, default=0)
     p.add_argument("--knn-temperature", type=float, default=0.1)
     p.add_argument("--shuffle-state-bank", action="store_true")
+    p.add_argument("--online-good-skill", default="")
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
 
@@ -96,6 +97,7 @@ def main() -> None:
         state_bank=state_bank,
         knn_k=args.knn_k,
         knn_temperature=args.knn_temperature,
+        online_good_skill=(Path(args.online_good_skill).read_text() if args.online_good_skill else None),
     )
     steps = [step for row in rows for step in row["trajectory"]]
     summary = {
@@ -117,6 +119,7 @@ def main() -> None:
         "knn_k": args.knn_k,
         "knn_temperature": args.knn_temperature,
         "shuffle_state_bank": args.shuffle_state_bank,
+        "online_good_skill": args.online_good_skill,
     }
     Path(args.out_dir, "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

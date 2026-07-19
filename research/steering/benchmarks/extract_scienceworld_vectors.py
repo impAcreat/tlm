@@ -56,7 +56,7 @@ def main() -> None:
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(artifact, out / "skill_vectors.pt")
-    printable = {k: v for k, v in artifact.items() if k != "vectors"}
+    printable = {k: v for k, v in artifact.items() if k not in {"vectors", "state_bank"}}
     (out / "geometry.json").write_text(json.dumps(printable, indent=2))
     print(json.dumps(printable, indent=2))
 
