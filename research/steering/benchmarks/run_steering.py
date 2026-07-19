@@ -50,7 +50,12 @@ def main() -> None:
     torch.save(artifact, out / "skill_vectors.pt")
     items = adapter.build_eval_env(3, "test", 42)
 
-    arms = {"bad": None, "good": "good", "steered": artifact["vectors"], "random": random_matched_vectors(artifact["vectors"])}
+    arms = {
+        "bad": None,
+        "good": None,
+        "steered": artifact["vectors"],
+        "random": random_matched_vectors(artifact["vectors"]),
+    }
     summary = {
         "num_extraction_states": len(prompts),
         "alpha": args.alpha,
