@@ -60,7 +60,9 @@ strength:
 
 compiler:
   model: ridge
-  alpha: 100.0
+  alpha_grid: [1.0, 10.0, 100.0, 1000.0, 10000.0]
+  selection: task_grouped_nested_cv
+  baselines: [mean_predictor, shuffled_labels]
   train_split_only: true
   group_key: task_id
 

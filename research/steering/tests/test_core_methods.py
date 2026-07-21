@@ -13,6 +13,9 @@ from research.steering.analysis.layer_selection import (
     pareto_front,
     rank_causal_layers,
 )
+from research.steering.experiments.reflexion_T.scripts.train_compiler import (
+    nested_grouped_predictions,
+)
 
 
 class Provider:
@@ -126,3 +129,17 @@ def test_pareto_shortlist_balances_metrics_and_depth():
     assert {row["layer"] for row in front} == {0, 3}
     result = diversified_pareto_shortlist(rows, depth_bins=2)
     assert [row["layer"] for row in result["candidates"]] == [1, 3]
+
+
+def test_nested_compiler_predictions_cover_outer_rows_without_group_leakage():
+    rng = np.random.default_rng(3)
+    groups = np.repeat(np.asarray(["a", "b", "c", "d", "e", "f"]), 2)
+    x = rng.normal(size=(len(groups), 4)).astype(np.float32)
+    y = np.stack((x[:, 0] + x[:, 1], x[:, 2] - x[:, 3]), axis=1).astype(np.float32)
+    result = nested_grouped_predictions(
+        x, y, groups, alphas=[1e-4, 1.0], outer_folds=3, inner_folds=2,
+    )
+    assert result["predictions"].shape == y.shape
+    assert result["shuffled_predictions"].shape == y.shape
+    assert set(result["fold_ids"]) == {0, 1, 2}
+    assert len(result["selected_alphas"]) == 3
