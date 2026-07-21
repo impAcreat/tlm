@@ -1905,3 +1905,40 @@ flips are primary; residual cosine is diagnostic only.
 
 Run directory:
 `research/steering/runs/reflex_T_qwen3_32b_clean_20260721/`.
+
+## 2026-07-21 Qwen3-32B clean protocol refinement before steering outcomes
+
+Status at protocol freeze: reflection collection is still incomplete (141/296
+Train+Dev groups). No clean-run layer extraction, steering calibration, or T
+artifact exists yet, and Test remains untouched. Therefore the following are
+pre-outcome method decisions rather than adaptations to steering results.
+
+Layer screening: replace the earlier top-residual-cosine-per-octile heuristic
+with an all-layer Pareto diagnostic over cross-state consistency, task-specific
+ratio, shared-component ratio, and task-grouped held-out T residual cosine.
+Select one balanced Pareto candidate per depth region to preserve depth
+coverage. This only produces a Dev candidate set; it cannot select the final
+intervention layer (`31ca137`).
+
+Content-specific causal control: every Dev layer/dose condition now includes a
+deterministic different-task extracted direction in addition to baseline, text,
+extracted, and norm-matched random. The donor direction uses the target unit's
+natural-rho and norm bounds, isolating semantic direction from perturbation
+magnitude. A condition is content-specific only if the correct extracted
+direction beats both random and mismatched directions (`19e9249`).
+
+Uncertainty and safety: report matched task bootstrap 95% intervals and the
+bootstrap probability of positive success delta. Task success remains primary;
+runtime errors, format repair, repetition, and first-action collapse are frozen
+safety guards (`267adc0`). Dose candidates remain negative sign, 0.25x, 0.5x,
+and 1.0x natural hidden-relative magnitude.
+
+Compiler validation: replace fixed alpha=100 evaluation with task-grouped
+nested CV over alpha in {1, 10, 100, 1000, 10000}; report mean-predictor and
+shuffled-label controls. Fit the final ridge only after layer and dose are
+frozen, using Train only. Residual cosine remains diagnostic and cannot replace
+predicted-vector causal validation (`0c51ac8`).
+
+Gate remains unchanged: wait for all 296 groups, require G1 absolute lift >=15
+percentage points plus at least 60 `text_success` and 40 `paired_effective`
+units, otherwise do not extract vectors or train T.
