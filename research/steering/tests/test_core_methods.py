@@ -8,7 +8,11 @@ from research.steering.core.compiler import RidgeCompiler
 from research.steering.core.extraction import PromptContrastExtractor
 from research.steering.core.metrics.causal import paired_flips
 from research.steering.analysis.dose_response import rank_doses
-from research.steering.analysis.layer_selection import rank_causal_layers
+from research.steering.analysis.layer_selection import (
+    diversified_pareto_shortlist,
+    pareto_front,
+    rank_causal_layers,
+)
 
 
 class Provider:
@@ -101,3 +105,24 @@ def test_causal_layer_and_dose_ranking_prioritize_safe_task_gain():
         {"dose": 2.0, "success": 1, "invalid_rate": 0.4},
     ]
     assert rank_doses(doses, max_invalid_rate=0.1)[0]["dose"] == 1.0
+
+
+def test_pareto_shortlist_balances_metrics_and_depth():
+    rows = [
+        {"layer": 0, "cross_state_consistency": 0.9, "heldout_T_residual_cos": 0.9,
+         "unit_specific_ratio": 0.1, "shared_component_ratio": 0.9},
+        {"layer": 1, "cross_state_consistency": 0.7, "heldout_T_residual_cos": 0.7,
+         "unit_specific_ratio": 0.7, "shared_component_ratio": 0.3},
+        {"layer": 2, "cross_state_consistency": 0.6, "heldout_T_residual_cos": 0.6,
+         "unit_specific_ratio": 0.6, "shared_component_ratio": 0.4},
+        {"layer": 3, "cross_state_consistency": 0.8, "heldout_T_residual_cos": 0.8,
+         "unit_specific_ratio": 0.8, "shared_component_ratio": 0.2},
+    ]
+    front = pareto_front(
+        rows,
+        maximize=("cross_state_consistency", "heldout_T_residual_cos", "unit_specific_ratio"),
+        minimize=("shared_component_ratio",),
+    )
+    assert {row["layer"] for row in front} == {0, 3}
+    result = diversified_pareto_shortlist(rows, depth_bins=2)
+    assert [row["layer"] for row in result["candidates"]] == [1, 3]

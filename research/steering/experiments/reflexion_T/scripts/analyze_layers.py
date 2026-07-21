@@ -9,7 +9,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from research.steering.analysis.layer_selection import grouped_compiler_diagnostic
+from research.steering.analysis.layer_selection import (
+    diversified_pareto_shortlist,
+    grouped_compiler_diagnostic,
+)
 
 
 def load_records(paths: list[Path], split: str, subset: str) -> list[dict]:
@@ -62,14 +65,8 @@ def main() -> None:
             "unit_specific_ratio": float(unit_specific_ratio[layer]),
             "natural_rho_median": float(np.median(rho[:, layer])),
         })
-    # Diversified shortlist: top residual-cos layer inside each depth octile,
-    # subject to above-median consistency. Final selection still requires Dev causality.
-    consistency_floor = float(np.median(consistency))
-    candidates = []
-    for start in range(0, len(layers), 8):
-        bucket = [row for row in layers[start:start + 8] if row["cross_state_consistency"] >= consistency_floor]
-        if bucket:
-            candidates.append(max(bucket, key=lambda row: row["heldout_T_residual_cos"])["layer"])
+    shortlist = diversified_pareto_shortlist(layers, depth_bins=8)
+    candidates = [row["layer"] for row in shortlist["candidates"]]
     result = {
         "protocol": {
             "split": args.split,
@@ -79,6 +76,8 @@ def main() -> None:
             "n_tasks": len(set(groups)),
             "final_layer_selected": False,
         },
+        "pareto_layers": shortlist["pareto_layers"],
+        "candidate_details": shortlist["candidates"],
         "offline_candidates": candidates,
         "layers": layers,
     }

@@ -30,6 +30,73 @@ def grouped_compiler_diagnostic(text_by_layer, vectors_by_layer, groups, *, alph
     return scores
 
 
+def _dominates(left, right, maximize, minimize):
+    left_values = [float(left[key]) for key in maximize] + [-float(left[key]) for key in minimize]
+    right_values = [float(right[key]) for key in maximize] + [-float(right[key]) for key in minimize]
+    return all(a >= b for a, b in zip(left_values, right_values)) and any(
+        a > b for a, b in zip(left_values, right_values)
+    )
+
+
+def pareto_front(rows, *, maximize, minimize=()):
+    """Return non-dominated diagnostic rows without collapsing metrics early."""
+    rows = list(rows)
+    return [
+        row for index, row in enumerate(rows)
+        if not any(
+            _dominates(other, row, maximize, minimize)
+            for other_index, other in enumerate(rows)
+            if other_index != index
+        )
+    ]
+
+
+def diversified_pareto_shortlist(rows, *, depth_bins=8):
+    """Choose one balanced Pareto candidate per depth region.
+
+    This is only an offline screen. It deliberately balances stability,
+    task-specific signal, compiler predictability, and low shared component;
+    Dev causal evaluation must make the final layer choice.
+    """
+    rows = sorted((dict(row) for row in rows), key=lambda row: int(row["layer"]))
+    if not rows:
+        return {"pareto_layers": [], "candidates": []}
+    maximize = ("cross_state_consistency", "heldout_T_residual_cos", "unit_specific_ratio")
+    minimize = ("shared_component_ratio",)
+    front = pareto_front(rows, maximize=maximize, minimize=minimize)
+    front_layers = {int(row["layer"]) for row in front}
+
+    utility = {}
+    for key, sign in [(x, 1.0) for x in maximize] + [(x, -1.0) for x in minimize]:
+        values = np.asarray([sign * float(row[key]) for row in rows], dtype=np.float64)
+        low, high = float(values.min()), float(values.max())
+        normalized = np.full_like(values, 0.5) if high == low else (values - low) / (high - low)
+        utility[key] = normalized
+    for index, row in enumerate(rows):
+        # Maximin prevents one attractive diagnostic (especially cosine) from
+        # hiding a weak causal prerequisite.
+        row["balanced_min_utility"] = float(min(values[index] for values in utility.values()))
+
+    candidates = []
+    for indices in np.array_split(np.arange(len(rows)), min(depth_bins, len(rows))):
+        bucket = [rows[int(index)] for index in indices]
+        pool = pareto_front(bucket, maximize=maximize, minimize=minimize)
+        chosen = max(pool, key=lambda row: (row["balanced_min_utility"], -int(row["layer"])))
+        candidates.append({
+            "layer": int(chosen["layer"]),
+            "depth_start": int(bucket[0]["layer"]),
+            "depth_end": int(bucket[-1]["layer"]),
+            "pareto_source": (
+                "global_pareto" if int(chosen["layer"]) in front_layers else "local_pareto"
+            ),
+            "balanced_min_utility": chosen["balanced_min_utility"],
+        })
+    return {
+        "pareto_layers": sorted(front_layers),
+        "candidates": candidates,
+    }
+
+
 def rank_causal_layers(rows, *, geometry_scores=None, max_invalid_increase=0.05):
     """Rank layers using extracted-vector task gain and random controls.
 
