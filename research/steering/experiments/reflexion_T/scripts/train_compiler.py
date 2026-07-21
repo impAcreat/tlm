@@ -25,13 +25,13 @@ def load_records(paths: list[Path]) -> list[dict]:
     return list(merged.values())
 
 
-def arrays(records: list[dict], text_layers: list[int], target_layer: int):
+def arrays(records: list[dict], text_layers: list[int], target_layer: int, group_key: str):
     x = np.concatenate(
         [np.stack([r["text_mean"][layer].float().numpy() for r in records]) for layer in text_layers],
         axis=1,
     )
     y = np.stack([r["vector"][target_layer].float().numpy() for r in records])
-    groups = np.asarray([r["episode_id"] for r in records])
+    groups = np.asarray([r[group_key] for r in records])
     return x.astype(np.float32), y.astype(np.float32), groups
 
 
@@ -44,12 +44,16 @@ def main() -> None:
     parser.add_argument("--subset", choices=("all", "text_success", "paired_effective"), default="text_success")
     parser.add_argument("--alpha", type=float, default=100.0)
     parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--group-key", default="task_id")
+    parser.add_argument("--split", choices=("train", "dev", "all"), default="train")
     args = parser.parse_args()
 
     records = load_records(args.inputs)
+    if args.split != "all":
+        records = [record for record in records if record.get("split") == args.split]
     if args.subset != "all":
         records = [record for record in records if bool(record.get(args.subset))]
-    x, y, groups = arrays(records, args.text_layers, args.target_layer)
+    x, y, groups = arrays(records, args.text_layers, args.target_layer, args.group_key)
     n_splits = min(args.folds, len(np.unique(groups)))
     if n_splits < 2:
         raise ValueError("compiler evaluation needs at least two episode groups")
@@ -74,7 +78,7 @@ def main() -> None:
             "subset": args.subset,
             "text_layers": args.text_layers,
             "target_layer": args.target_layer,
-            "group_key": "episode_id",
+            "group_key": args.group_key,
             "n_splits": n_splits,
         },
         "metrics": {
@@ -86,6 +90,7 @@ def main() -> None:
             {
                 "unit_id": record["unit_id"],
                 "episode_id": record["episode_id"],
+                "task_id": record.get("task_id"),
                 "fold": int(fold_ids[i]),
                 "raw_cos": float(raw_cos[i]),
                 "residual_cos": float(residual_cos[i]),

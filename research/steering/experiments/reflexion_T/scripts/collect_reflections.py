@@ -180,6 +180,22 @@ def select_tasks(manifest: dict, limit: int) -> list[str]:
     return selected
 
 
+def load_groups(manifest: dict, plan_path: Path | None, splits: list[str], limit: int) -> list[dict]:
+    if plan_path is None:
+        return [
+            {"group_id": task_id, "task_id": task_id, "task_seed": 0, "split": "legacy"}
+            for task_id in select_tasks(manifest, limit)
+        ]
+    plan = json.loads(plan_path.read_text())
+    groups = [group for group in plan["groups"] if group["split"] in set(splits)]
+    if limit:
+        groups = groups[:limit]
+    missing = [group["task_id"] for group in groups if group["task_id"] not in manifest["tasks"]]
+    if missing:
+        raise ValueError(f"split plan contains unknown tasks: {missing[:3]}")
+    return groups
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True)
@@ -188,6 +204,8 @@ def main() -> None:
     parser.add_argument("--shard", type=int, required=True)
     parser.add_argument("--num-shards", type=int, default=3)
     parser.add_argument("--limit", type=int, default=40)
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--splits", nargs="+", default=["train", "dev"])
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max-steps", type=int, default=35)
     parser.add_argument("--max-new-tokens", type=int, default=320)
@@ -198,9 +216,9 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = ROOT / "research/steering/experiments/reflexion_T/resources/manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    selected = select_tasks(manifest, args.limit)
-    (out_dir / "task_ids.json").write_text(json.dumps(selected, indent=2))
-    task_ids = selected[args.shard::args.num_shards]
+    groups = load_groups(manifest, args.plan, args.splits, args.limit if args.plan is None else 0)
+    (out_dir / "groups.json").write_text(json.dumps(groups, indent=2) + "\n")
+    task_groups = groups[args.shard::args.num_shards]
 
     result_path = out_dir / f"results_shard{args.shard}.jsonl"
     done = set()
@@ -216,13 +234,17 @@ def main() -> None:
     benchmark = AlfworldAdapter(SKILLOPT_ROOT / "data" / "alfworld_data", seed=42)
 
     with result_path.open("a") as fout:
-        for index, tid in enumerate(task_ids):
-            if tid in done:
+        for index, group in enumerate(task_groups):
+            group_id = group["group_id"]
+            task_id = group["task_id"]
+            task_seed = int(group["task_seed"])
+            if group_id in done:
                 continue
             started = time.time()
-            entry = manifest["tasks"][tid]["v0000"]
+            entry = manifest["tasks"][task_id]["v0000"]
             initial = run_attempt(
-                model, tokenizer, args.device, benchmark, entry, [], seed=stable_seed(tid, "initial"),
+                model, tokenizer, args.device, benchmark, entry, [],
+                seed=stable_seed(group_id, task_seed, "initial"),
                 temperature=args.temperature, max_steps=args.max_steps,
                 max_new_tokens=args.max_new_tokens,
             )
@@ -233,19 +255,19 @@ def main() -> None:
                 # The no-memory control always receives the full two-retry
                 # budget, independent of whether the Reflexion arm succeeds.
                 for retry in range(2):
-                    trial_seed = stable_seed(tid, "retry", retry)
+                    trial_seed = stable_seed(group_id, task_seed, "retry", retry)
                     control.append(run_attempt(
                         model, tokenizer, args.device, benchmark, entry, [], seed=trial_seed,
                         temperature=args.temperature, max_steps=args.max_steps,
                         max_new_tokens=args.max_new_tokens,
                     ))
                 for retry in range(2):
-                    trial_seed = stable_seed(tid, "retry", retry)
+                    trial_seed = stable_seed(group_id, task_seed, "retry", retry)
                     source = initial if retry == 0 else reflex[-1]
                     reflection = chat(
                         model, tokenizer, args.device, REFLECT_SYSTEM,
                         reflection_prompt(entry, source, reflections),
-                        seed=stable_seed(tid, "reflection", retry),
+                        seed=stable_seed(group_id, task_seed, "reflection", retry),
                         max_new_tokens=args.reflection_tokens, temperature=args.temperature,
                     )
                     reflections.append(reflection)
@@ -257,7 +279,11 @@ def main() -> None:
                     if reflex[-1]["hard"]:
                         break
             row = {
-                "id": tid,
+                "id": group_id,
+                "group_id": group_id,
+                "task_id": task_id,
+                "task_seed": task_seed,
+                "split": group["split"],
                 "task_type": entry["task_type"],
                 "task_description": entry.get("task_description", ""),
                 "initial": initial,
@@ -272,7 +298,8 @@ def main() -> None:
             fout.write(json.dumps(row, ensure_ascii=False) + "\n")
             fout.flush()
             print(json.dumps({
-                "shard": args.shard, "n": index, "id": tid,
+                "shard": args.shard, "n": index, "id": group_id,
+                "task_id": task_id, "split": group["split"],
                 "initial": initial["hard"], "control_any": row["control_any"],
                 "reflex_any": row["reflex_any"], "elapsed_s": row["elapsed_s"],
             }), flush=True)

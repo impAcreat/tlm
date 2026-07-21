@@ -1,0 +1,64 @@
+experiment:
+  name: reflex_T_qwen3_32b_clean
+  model: Qwen3-32B
+  split_hash: 5fa0a3c1fae7f3464726a1d0e808550cf131f435621ff8fd93033dc895064057
+
+split:
+  task_disjoint: true
+  train:
+    source: valid_seen_4b_v0000_failures
+    tasks: 66
+    seeds_per_task: 4
+  dev:
+    source: valid_seen_4b_v0000_failures
+    tasks: 16
+    seeds_per_task: 2
+  test:
+    source: valid_unseen_4b_v0000_failures
+    tasks: 85
+    seeds_per_task: 1
+    untouched_until_g3: true
+
+reflection_collection:
+  temperature: 0.7
+  retries: 2
+  preserve_full_text: true
+  distill: false
+  target_reflections: 300
+  minimum_text_success: 60
+  minimum_paired_effective: 40
+
+extraction:
+  method: prompt_contrast
+  pooling: last_token
+  state_count: 200
+  labels: text_success
+  all_layers: true
+
+layer_selection:
+  offline_diagnostics:
+    - cross_state_consistency
+    - unit_specific_ratio
+    - grouped_task_heldout_residual_cosine
+    - vector_norm
+    - shared_component_ratio
+  final_selection: dev_extracted_vs_random_causality_and_safety
+
+strength:
+  policy: hidden_relative
+  natural_rho: median_delta_norm_over_base_hidden_norm
+  multipliers: [0.25, 0.5, 1.0]
+  include_sign_control: true
+  bounds: natural_delta_norm_q10_q90
+
+compiler:
+  model: ridge
+  alpha: 100.0
+  train_split_only: true
+  group_key: task_id
+
+g3:
+  split: test
+  arms: [baseline, text, extracted, predicted, random]
+  primary_metrics: [success, paired_flips, invalid_rate, repeat_rate]
+  compiler_cosine_is_diagnostic_only: true

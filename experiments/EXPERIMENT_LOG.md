@@ -1868,3 +1868,40 @@ faithful reflection dataset. Final evidence must prioritize task success and
 paired flips; cosine remains a compiler diagnostic.
 
 Artifacts: research/steering/runs/reflex_T_qwen3_32b_20260721/{phase1,phase2}.
+
+## 2026-07-21 Qwen3-32B clean Reflexion-T pre-registration and launch
+
+Question: after removing the proportional-layer and fixed-dose assumptions, can
+text-effect-validated faithful reflections support safe, content-specific
+activation steering and a causal text-to-vector compiler?
+
+Frozen split before generation: task-disjoint Train/Dev/Test. Train and Dev are
+drawn from the frozen valid_seen tasks failed by the prior 4B v0000 baseline;
+Test is the disjoint valid_unseen failure set and remains untouched until G3.
+Counts are Train 66 tasks x 4 seeds = 264 task-seed groups, Dev 16 x 2 = 32,
+and Test 85 x 1 = 85. Split SHA256:
+`5fa0a3c1fae7f3464726a1d0e808550cf131f435621ff8fd93033dc895064057`.
+
+Collection protocol remains faithful same-model Reflexion: Qwen3-32B authors
+full, specific reflections from its own genuine failed trajectory and executes
+the retry; no distillation or rewriting; two matched no-memory controls use the
+same retry seeds. Target is about 300 reflections. Formal T conclusions require
+at least 60 `text_success` and 40 conservative arm-level `paired_effective`
+units.
+
+Pre-registered analysis order: (1) extract all-layer prompt-contrast labels for
+text-success units over 200 frozen states; (2) report cross-state consistency,
+unit-specific/shared ratios, vector norms, and task-grouped held-out T residual
+cosine; (3) use those only to shortlist layers; (4) select the final layer and
+hidden-relative dose on Dev using extracted versus norm-matched random task
+causality and output-safety metrics. The dose is
+`||delta h_t|| = multiplier * natural_rho * ||h_t||`, with natural-rho and
+addition-norm bounds estimated from the natural text/base contrast; candidate
+multipliers are 0.25, 0.5, and 1.0 plus a sign control.
+
+Only after layer/dose freeze will ridge T be fitted on Train groups. Final G3 on
+untouched Test uses baseline/text/extracted/predicted/random. Success and paired
+flips are primary; residual cosine is diagnostic only.
+
+Run directory:
+`research/steering/runs/reflex_T_qwen3_32b_clean_20260721/`.
