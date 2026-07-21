@@ -11,6 +11,8 @@ from pathlib import Path
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--plan", type=Path)
+    ap.add_argument("--splits", nargs="+", default=["train", "dev"])
     args = ap.parse_args()
     root = Path(args.out_dir)
     rows = []
@@ -18,6 +20,15 @@ def main() -> None:
         rows.extend(json.loads(line) for line in Path(path).read_text().splitlines() if line.strip())
 
     duplicate_ids = [k for k, v in Counter(r["id"] for r in rows).items() if v > 1]
+    expected_ids = None
+    missing_ids, unexpected_ids = [], []
+    if args.plan:
+        plan = json.loads(args.plan.read_text())
+        expected_ids = {g["group_id"] for g in plan["groups"] if g["split"] in args.splits}
+        actual_ids = {r["id"] for r in rows}
+        missing_ids = sorted(expected_ids - actual_ids)
+        unexpected_ids = sorted(actual_ids - expected_ids)
+    collection_complete = bool(expected_ids is not None and not missing_ids and not unexpected_ids and not duplicate_ids)
     errors = []
     for row in rows:
         for arm, attempts in (
@@ -46,8 +57,27 @@ def main() -> None:
         d["control"] += r["control_any"]
         d["reflex"] += r["reflex_any"]
 
+    threshold_met = bool(n and (reflex - control) / n >= 0.15)
+
+    def split_summary(split):
+        selected = [r for r in eligible if r.get("split") == split]
+        count = len(selected)
+        control_count = sum(r["control_any"] for r in selected)
+        reflex_count = sum(r["reflex_any"] for r in selected)
+        return {
+            "eligible_initial_failures": count,
+            "control_rate": control_count / count if count else None,
+            "reflex_rate": reflex_count / count if count else None,
+            "absolute_lift": (reflex_count - control_count) / count if count else None,
+        }
+
     summary = {
         "rows": len(rows),
+        "expected_rows": len(expected_ids) if expected_ids is not None else None,
+        "collection_complete": collection_complete,
+        "missing_count": len(missing_ids),
+        "missing_ids_preview": missing_ids[:20],
+        "unexpected_ids": unexpected_ids,
         "initial_successes": sum(r["initial"]["hard"] for r in rows),
         "eligible_initial_failures": n,
         "control_successes": control,
@@ -55,7 +85,8 @@ def main() -> None:
         "reflex_successes": reflex,
         "reflex_rate": reflex / n if n else None,
         "absolute_lift": (reflex - control) / n if n else None,
-        "gate_G1_pass": bool(n and (reflex - control) / n >= 0.15),
+        "gate_G1_threshold_met": threshold_met,
+        "gate_G1_pass": threshold_met if collection_complete else None,
         "paired": {
             "reflex_only": reflex_only,
             "control_only": control_only,
@@ -63,6 +94,7 @@ def main() -> None:
             "neither": neither,
         },
         "by_task_type": dict(by_type),
+        "by_split": {split: split_summary(split) for split in args.splits},
         "duplicate_ids": duplicate_ids,
         "runtime_errors": errors,
     }
