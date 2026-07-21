@@ -1,4 +1,7 @@
-from research.steering.experiments.reflexion_T.scripts.summarize_calibration import summarize
+from research.steering.experiments.reflexion_T.scripts.summarize_calibration import (
+    matched_bootstrap,
+    summarize,
+)
 
 
 def row(unit, arm, hard, *, layer=-1, multiplier=0.0, action="go", repair=0.0, repeat=0.0):
@@ -45,3 +48,11 @@ def test_safety_gate_rejects_repeat_collapse():
     ]
     result = summarize(rows)
     assert result["conditions"][0]["arms"]["extracted"]["safe"] is False
+
+
+def test_matched_bootstrap_reports_task_level_uncertainty():
+    certain = matched_bootstrap([1.0, 1.0, 1.0], samples=100)
+    assert certain["ci95"] == [1.0, 1.0]
+    assert certain["probability_positive"] == 1.0
+    empty = matched_bootstrap([])
+    assert empty["ci95"] == [None, None]

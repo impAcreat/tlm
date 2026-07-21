@@ -8,9 +8,25 @@ import math
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import numpy as np
+
 
 def mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def matched_bootstrap(values: list[float], *, samples: int = 5000, seed: int = 42) -> dict:
+    """Task-level bootstrap interval for a paired metric difference."""
+    if not values:
+        return {"ci95": [None, None], "probability_positive": None}
+    array = np.asarray(values, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(array), size=(samples, len(array)))
+    means = array[indices].mean(axis=1)
+    return {
+        "ci95": [float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))],
+        "probability_positive": float(np.mean(means > 0)),
+    }
 
 
 def load_rows(paths: list[Path]) -> list[dict]:
@@ -53,9 +69,11 @@ def paired_metrics(candidate: list[dict], reference_by_unit: dict[str, dict]) ->
     for row, ref in pairs:
         row_actions, ref_actions = row.get("actions", []), ref.get("actions", [])
         action_changed.append(bool(row_actions and ref_actions and row_actions[0] != ref_actions[0]))
+    differences = [float(row["hard"]) - float(ref["hard"]) for row, ref in pairs]
     return {
         "paired_n": len(pairs),
-        "success_delta": mean([float(row["hard"]) - float(ref["hard"]) for row, ref in pairs]),
+        "success_delta": mean(differences),
+        "success_delta_uncertainty": matched_bootstrap(differences),
         "wins": wins,
         "losses": losses,
         "ties": len(pairs) - wins - losses,
@@ -66,9 +84,11 @@ def paired_metrics(candidate: list[dict], reference_by_unit: dict[str, dict]) ->
 def paired_arm_delta(candidate: list[dict], reference: list[dict]) -> dict:
     reference_by_unit = {row["unit_id"]: row for row in reference}
     pairs = [(row, reference_by_unit[row["unit_id"]]) for row in candidate if row["unit_id"] in reference_by_unit]
+    differences = [float(row["hard"]) - float(ref["hard"]) for row, ref in pairs]
     return {
         "paired_n": len(pairs),
-        "success_delta": mean([float(row["hard"]) - float(ref["hard"]) for row, ref in pairs]),
+        "success_delta": mean(differences),
+        "success_delta_uncertainty": matched_bootstrap(differences),
         "wins": sum(int(row["hard"] and not ref["hard"]) for row, ref in pairs),
         "losses": sum(int(ref["hard"] and not row["hard"]) for row, ref in pairs),
     }
@@ -170,14 +190,16 @@ def markdown(summary: dict) -> str:
         f"- Baseline: {baseline['success_rate']:.3f} ({baseline['n']} units)",
         f"- Text upper bound: {text['success_rate']:.3f}; paired delta {text['success_delta']:+.3f}",
         "",
-        "| layer | multiplier | arm | n | success | paired delta | W/L | safe | content-specific |",
-        "|---:|---:|:---|---:|---:|---:|:---:|:---:|:---:|",
+        "| layer | multiplier | arm | n | success | paired delta [95% CI] | W/L | safe | content-specific |",
+        "|---:|---:|:---|---:|---:|:---|:---:|:---:|:---:|",
     ]
     for condition in summary["conditions"]:
         for arm, metrics in condition["arms"].items():
+            low, high = metrics["success_delta_uncertainty"]["ci95"]
+            interval = "n/a" if low is None else f"[{low:+.3f}, {high:+.3f}]"
             lines.append(
                 f"| {condition['layer']} | {condition['multiplier']:g} | {arm} | {metrics['n']} | "
-                f"{metrics['success_rate']:.3f} | {metrics['success_delta']:+.3f} | "
+                f"{metrics['success_rate']:.3f} | {metrics['success_delta']:+.3f} {interval} | "
                 f"{metrics['wins']}/{metrics['losses']} | {str(metrics['safe']).lower()} | "
                 f"{str(condition['content_specific'] if arm == 'extracted' else False).lower()} |"
             )
