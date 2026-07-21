@@ -151,6 +151,18 @@ def random_direction(vector: torch.Tensor, unit_id: str, layer: int) -> torch.Te
     return random / random.norm().clamp_min(1e-12)
 
 
+def mismatch_donor(record: dict, records: list[dict]) -> dict:
+    """Choose a deterministic different-task donor for semantic specificity."""
+    candidates = sorted(
+        (row for row in records if row["task_id"] != record["task_id"]),
+        key=lambda row: row["unit_id"],
+    )
+    if not candidates:
+        raise ValueError("mismatched control requires at least two distinct tasks")
+    index = int.from_bytes(hashlib.sha256(record["unit_id"].encode()).digest()[:8], "big")
+    return candidates[index % len(candidates)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True)
@@ -167,8 +179,8 @@ def main() -> None:
     args = parser.parse_args()
 
     shard_index, shard_count = map(int, args.shard.split("/"))
-    records = select_dev_units(load_records(args.inputs), args.limit_units)
-    records = records[shard_index::shard_count]
+    all_records = select_dev_units(load_records(args.inputs), args.limit_units)
+    records = all_records[shard_index::shard_count]
     manifest = json.loads(args.manifest.read_text())
     model, tokenizer = load_causal_lm(args.model_path, args.device)
     benchmark = AlfworldAdapter(SKILLOPT_ROOT / "data" / "alfworld_data", seed=42)
@@ -185,15 +197,19 @@ def main() -> None:
                 (arm, layer, multiplier)
                 for layer in args.layers
                 for multiplier in args.multipliers
-                for arm in ("extracted", "random")
+                for arm in ("extracted", "random", "mismatched")
             ]
             for arm, layer, multiplier in specs:
                 eval_id = f"{record['unit_id']}|{arm}|L{layer}|m{multiplier:g}"
                 if eval_id in done:
                     continue
                 vector = record["vector"][layer].float() if layer >= 0 else None
+                donor = None
                 if arm == "random":
                     vector = random_direction(vector, record["unit_id"], layer)
+                elif arm == "mismatched":
+                    donor = mismatch_donor(record, all_records)
+                    vector = donor["vector"][layer].float()
                 steerer_spec = None
                 if vector is not None:
                     steerer_spec = {
@@ -222,6 +238,8 @@ def main() -> None:
                     "multiplier": multiplier,
                     "text_success_at_collection": bool(record["text_success"]),
                     "paired_effective_at_collection": bool(record["paired_effective"]),
+                    "mismatch_donor_unit_id": donor["unit_id"] if donor else None,
+                    "mismatch_donor_task_id": donor["task_id"] if donor else None,
                     "elapsed_s": round(time.time() - started, 1),
                     **result,
                 }

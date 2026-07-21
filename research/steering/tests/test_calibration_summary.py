@@ -25,6 +25,8 @@ def test_summary_prioritizes_task_success_and_random_control():
         row("b", "extracted", 1, layer=20, multiplier=0.5, action="take"),
         row("a", "random", 0, layer=20, multiplier=0.5, action="look"),
         row("b", "random", 0, layer=20, multiplier=0.5, action="inventory"),
+        row("a", "mismatched", 0, layer=20, multiplier=0.5, action="look"),
+        row("b", "mismatched", 0, layer=20, multiplier=0.5, action="inventory"),
     ]
     result = summarize(rows)
     condition = result["conditions"][0]
@@ -39,6 +41,7 @@ def test_safety_gate_rejects_repeat_collapse():
     rows += [
         row("a", "extracted", 1, layer=10, multiplier=1.0, repeat=0.8),
         row("a", "random", 0, layer=10, multiplier=1.0),
+        row("a", "mismatched", 0, layer=10, multiplier=1.0),
     ]
     result = summarize(rows)
     assert result["conditions"][0]["arms"]["extracted"]["safe"] is False

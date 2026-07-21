@@ -96,7 +96,7 @@ def summarize(rows: list[dict], *, error_margin: float = 0.0, rate_margin: float
 
     grouped: dict[tuple[int, float, str], list[dict]] = defaultdict(list)
     for row in rows:
-        if row["arm"] in {"extracted", "random", "predicted"}:
+        if row["arm"] in {"extracted", "random", "mismatched", "predicted"}:
             grouped[(int(row["layer"]), float(row["multiplier"]), row["arm"])].append(row)
 
     conditions = []
@@ -104,7 +104,7 @@ def summarize(rows: list[dict], *, error_margin: float = 0.0, rate_margin: float
     for layer, multiplier in keys:
         condition = {"layer": layer, "multiplier": multiplier, "arms": {}}
         arm_rows_by_name = {}
-        for arm in ("extracted", "predicted", "random"):
+        for arm in ("extracted", "predicted", "random", "mismatched"):
             arm_rows = grouped.get((layer, multiplier, arm), [])
             if not arm_rows:
                 continue
@@ -117,19 +117,26 @@ def summarize(rows: list[dict], *, error_margin: float = 0.0, rate_margin: float
             condition["arms"][arm] = metrics
         extracted = condition["arms"].get("extracted")
         random = condition["arms"].get("random")
+        mismatched = condition["arms"].get("mismatched")
         expected_units = set(baseline_by_unit)
         condition["coverage_complete"] = bool(
-            extracted and random
+            extracted and random and mismatched
             and {r["unit_id"] for r in arm_rows_by_name["extracted"]} == expected_units
             and {r["unit_id"] for r in arm_rows_by_name["random"]} == expected_units
+            and {r["unit_id"] for r in arm_rows_by_name["mismatched"]} == expected_units
         )
         condition["extracted_vs_random"] = (
             paired_arm_delta(arm_rows_by_name["extracted"], arm_rows_by_name["random"])
             if extracted and random else None
         )
+        condition["extracted_vs_mismatched"] = (
+            paired_arm_delta(arm_rows_by_name["extracted"], arm_rows_by_name["mismatched"])
+            if extracted and mismatched else None
+        )
         condition["content_specific"] = bool(
             condition["coverage_complete"]
             and condition["extracted_vs_random"]["success_delta"] > 0
+            and condition["extracted_vs_mismatched"]["success_delta"] > 0
             and extracted["wins"] >= extracted["losses"]
         )
         conditions.append(condition)
