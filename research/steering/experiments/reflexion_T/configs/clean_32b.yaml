@@ -50,6 +50,13 @@ strength:
   multipliers: [0.25, 0.5, 1.0]
   include_sign_control: true
   bounds: natural_delta_norm_q10_q90
+  dev_safety_gate:
+    runtime_error_rate_margin: 0.0
+    format_repair_rate_margin: 0.10
+    repeat_rate_margin: 0.10
+    first_action_max_share_margin: 0.20
+  dev_primary_selection: matched_task_success_delta
+  require_extracted_better_than_random: true
 
 compiler:
   model: ridge

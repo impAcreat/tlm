@@ -17,6 +17,9 @@ extraction, application, compiler, and metric implementations live in
 - `scripts/summarize_text_gate.py`: G1 text-effect summary.
 - `scripts/build_reflection_dataset.py`: convert validated traces to compiler units.
 - `scripts/extract_vectors.py`: sharded, resumable paired prompt-contrast extraction.
+- `scripts/analyze_layers.py`: all-layer Train diagnostics for a small candidate shortlist.
+- `scripts/calibrate_interventions.py`: matched Dev baseline/text/extracted/random causal runs.
+- `scripts/summarize_calibration.py`: task-success-first Dev summary and safety gate.
 - `scripts/train_compiler.py`: group-held-out ridge fitting and diagnostics.
 
 Layer choice and steering dose are intentionally absent from model defaults.
