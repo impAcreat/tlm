@@ -6,6 +6,27 @@
 !/experiments
 !/research
 
+# generated and runtime artifacts inside allowed source trees
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/runs/
+**/outputs/
+**/logs/
+**/envs/
+**/models/
+**/datasets/
+**/.cache/
+*.log
+*.jsonl
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+
 # backup/snapshot artifacts
 *.bak
 *.preopt

@@ -1,0 +1,33 @@
+experiment:
+  name: reflexion_T
+  seed: 42
+  split_key: task_seed_group
+
+benchmark:
+  name: alfworld
+  data_root: benchmarks/skillopt/data/alfworld_data
+  max_steps: 35
+
+reflection:
+  temperature: 0.7
+  retries: 2
+  preserve_full_text: true
+  distill: false
+
+extraction:
+  method: prompt_contrast
+  pooling: last_token
+  aggregation: mean
+  state_count: 200
+
+application:
+  method: additive
+  token_scope: generation_only
+
+compiler:
+  method: ridge
+  alpha: 100.0
+
+evaluation:
+  arms: [baseline, text, extracted, predicted, random]
+  decoding: greedy

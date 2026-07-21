@@ -1,0 +1,10 @@
+calibration:
+  selection_split: dev
+  group_key: task_seed_group
+  geometry:
+    metric: residual_cosine
+    folds: 5
+  required_checks:
+    - cross_state_consistency
+    - extracted_causal_gain
+    - random_safety

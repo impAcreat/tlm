@@ -650,3 +650,1221 @@ Evidence boundary:
 - The minimal code/prompt fix was useful as a guardrail: it rejects exploration-guidance rules that previously caused hallucinated entities, but it is not sufficient to create new useful policy dimensions.
 
 Next decision: keep the framework, but change proposal pressure/evaluation toward diverse feedback dimensions and agent-consumption evidence before running larger batches.
+
+
+## 2026-07-03 SkillOpt ALFWorld raw-preserving intention-aware feedback augmentation low-budget
+
+Question: keep SkillOpt ALFWorld raw environment feedback, add one natural-language feedback augmentation sentence conditioned on the agent stated intention, and test local-Qwen SkillOpt behavior without EFM self-evolution.
+
+Implementation:
+- Modified benchmarks/skillopt/skillopt/envs/alfworld/rollout.py so target agents are asked to emit intention tags before action tags.
+- When EFM is enabled, the next agent observation preserves raw env feedback and appends one natural-language augmentation sentence.
+- Conversation traces persist intention, raw_env_feedback, feedback_augmentation, feedback_intention_status, and feedback_signal_type for SkillOpt reflection and analysis.
+- EFM self-evolution was disabled in all augmentation experiments: env.feedback_policy_update_enabled=false and env.feedback_reflect_enabled=false; feedback_state.json confirmed policy.version=0 and no policy_updates.
+
+Run setup:
+- Repo: /data5/ninghan/tlm/benchmarks/skillopt
+- Target model: qwen3-32b-awq-tool at http://127.0.0.1:8006/v1
+- Optimizer and EFM model: qwen3-32b-awq-tool at http://127.0.0.1:8008/v1
+- Training budget per arm: 1 epoch, train_size=16, batch_size=8, 2 update steps, selection env_num=12, max_steps=30, workers=4.
+- Final and cross eval: valid_unseen, test_env_num=32, max_steps=30.
+
+Artifacts:
+- Raw SkillOpt train: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_raw_lowbudget_20260703_122629b
+- Intent-aug SkillOpt train: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_intentaug_lowbudget_20260703_122629b
+- Raw best eval: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_raw_lowbudget_20260703_122629b_test32_best
+- Intent-aug best eval: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_intentaug_lowbudget_20260703_122629b_test32_best
+- Initial plus raw cross eval: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_raw_initial_lowbudget_20260703_122629b_test32
+- Rawbest plus intent-aug cross eval: /data5/ninghan/tlm/benchmarks/skillopt/outputs/skillopt32_intentaug_rawbest_lowbudget_20260703_122629b_test32
+
+Results:
+- Training selection: raw accepted step_0002 and reached best_score=0.6667; intent-aug rejected both candidate updates and kept initial_skill with best_score=0.6667.
+- valid_unseen test32 2x2:
+  - initial skill plus raw feedback: 24/32 = 0.7500 hard/soft
+  - initial skill plus intent-aug feedback: 27/32 = 0.84375 hard/soft
+  - raw-optimized skill plus raw feedback: 22/32 = 0.6875 hard/soft
+  - raw-optimized skill plus intent-aug feedback: 29/32 = 0.90625 hard/soft
+- Regression tests: from benchmarks/skillopt, pytest tests/test_efm.py tests/test_alfworld_worker_start.py passed: 22 passed.
+
+Evidence boundary:
+- This is a low-budget fixed test32 subset result, not a full SkillOpt paper reproduction.
+- The 2x2 strongly suggests the feedback augmentation channel itself improved agent behavior on this subset; the raw skill update alone did not generalize on the same subset.
+- Because intent-aug training kept the initial skill, the main observed gain is currently from online feedback consumption, not from better skill text evolution.
+
+Next decision: run larger valid_unseen or full-test repetitions with fixed seeds and either freeze skill to isolate feedback-channel effect, or redesign reflection prompts so SkillOpt uses intention and feedback diagnostics to update skill text rather than relying mostly on online augmentation.
+
+## 2026-07-04 SkillOpt ALFWorld intention-aug 4B follow-up
+
+Context: target agent is Qwen/Qwen3.5-4B on port 8007; optimizer/EFM is qwen3-32b-awq-tool on port 8008. EFM policy self-update and trajectory reflection remain disabled for these runs. Split is ALFWorld valid_unseen test32, max_steps=30.
+
+Baseline v1, old rollout prompt plus raw-preserving feedback augmentation:
+- Train raw lowbudget: output `benchmarks/skillopt/outputs/skillopt4b_raw_lowbudget_20260704_4b_1059`; both step candidates rejected; best remains initial; selection best 0.6667.
+- Train intent-aug lowbudget: output `benchmarks/skillopt/outputs/skillopt4b_intentaug_lowbudget_20260704_4b_1059`; step1 accepted, step2 rejected; best step1; selection best 0.5833.
+- Test32:
+  - initial+raw: 24/32 = 0.7500, mean turns 15.19, median 10.0.
+  - initial+intent-aug: 27/32 = 0.8438, mean turns 13.19, median 7.5.
+  - aug-best+raw: 23/32 = 0.7188, mean turns 15.06, median 8.0.
+  - aug-best+intent-aug: 25/32 = 0.7812, mean turns 13.50, median 8.5.
+- Diagnosis: augmentation helps base execution, but the accepted skill does not generalize on valid_unseen. Also most old-prompt trajectories did not contain explicit `<intention>` tags, so the method behaved more like raw-preserving feedback-summary augmentation than true stated-intention feedback.
+
+Prompt/formatter v2:
+- Code changes: rollout prompts request `<think>`, `<intention>`, `<action>`; `fmt_trajectory` exposes intention/raw_obs/feedback_aug/feedback_meta; analyst prompts mention intention diagnostics.
+- Smoke: Qwen-4B begins emitting `intention`, and EFM produces fulfilled/unfulfilled statuses.
+- Train output `benchmarks/skillopt/outputs/skillopt4b_intentaug_promptv2_lowbudget_20260704`: both candidates rejected; baseline selection 0.5833; step1 selection 0.5000; step2 selection 0.5000.
+- Diagnosis: explicit intention signal exists, but analyst/ranking still produce generic search/visibility/backtrack edits.
+
+Prompt/formatter v3:
+- Additional prompt filter in analyst/merge/ranking to down-rank edits that restate existing ALFWorld basics and to allow selecting fewer/zero edits.
+- Train output `benchmarks/skillopt/outputs/skillopt4b_intentaug_promptv3_lowbudget_20260704`: step1 rejected; step2 accepted as new best; selection best 0.6667.
+- Accepted skill is still mostly search/location-tracking guidance, but it passes selection under strict-intention prompt.
+- Test32 under promptv3 code:
+  - initial+raw: 19/32 = 0.5938, mean turns 18.63, median 18.0.
+  - initial+intent-aug: 23/32 = 0.7188, mean turns 16.59, median 11.5.
+  - v3-best+raw: 23/32 = 0.7188, mean turns 16.09, median 12.0.
+  - v3-best+intent-aug: 29/32 = 0.9062, mean turns 13.38, median 9.0.
+- Interpretation: strict intention prompting hurts base 4B execution substantially, but with the evolved skill and augmentation together it reaches the best 4B test32 result so far. Next mechanism to try: avoid strict output-format prompting and infer intention from the target model free-text rationale before `<action>`, preserving old execution behavior while providing EFM/reflection an intention field.
+
+
+## 2026-07-04 SkillOpt ALFWorld Qwen3.5-4B promptv4 soft-intention augmentation
+
+Question: can raw-preserving intention-aware feedback augmentation improve base ALFWorld execution and/or SkillOpt skill evolution with the paper-aligned 4B target agent, while keeping EFM self-evolution disabled?
+
+Setup:
+- Repo: `/data5/ninghan/tlm/benchmarks/skillopt`
+- Target agent: `Qwen/Qwen3.5-4B` at `http://127.0.0.1:8007/v1`
+- Optimizer / EFM: `qwen3-32b-awq-tool` at `http://127.0.0.1:8008/v1`
+- Train run: `outputs/skillopt4b_intentaug_promptv4_lowbudget_20260704`
+- Eval split: `valid_unseen`, `test_env_num=32`, `max_steps=30`, `workers=4`
+- EFM self-evolution disabled: `env.feedback_policy_update_enabled=false`, `env.feedback_reflect_enabled=false`
+- v4 mechanism: keep original soft rollout prompt; extract explicit `<intention>`, else `<think>`, else free-text rationale before `<action>`; preserve raw feedback and append one natural-language augmentation sentence.
+
+Training result:
+- Baseline selection: `6/12 = 0.5000`
+- Step 1: rollout `3/8 = 0.3750`; selected two generic failure edits about searched locations / visible-object pickup; selection `7/12 = 0.5833`; accepted as new best. Timing: total `2151.1s`, rollout `952.9s`, reflect `39.0s`, aggregate `43.6s`, select `6.5s`, evaluate `1109.0s`.
+- Step 2: rollout `3/8 = 0.3750`; selected further generic navigation/progress edits; selection `6/12 = 0.5000`; rejected. Best remains step 1.
+
+Valid-unseen test32 results:
+
+| condition | hard | mean turns | median turns | success mean turns | notes |
+|---|---:|---:|---:|---:|---|
+| initial + raw | `20/32 = 0.6250` | `16.91` | `11.5` | `9.05` | raw baseline under v4 code |
+| initial + intent-aug | `27/32 = 0.8438` | `13.50` | `10.0` | `10.44` | strong execution gain from augmentation alone |
+| step1 best + raw | `23/32 = 0.7188` | `16.50` | `14.5` | `11.22` | accepted skill generalizes modestly under raw feedback |
+| step1 best + intent-aug | `20/32 = 0.6250` | `17.09` | `11.5` | `9.35` | negative interaction between generic skill edits and augmentation |
+
+Task-type split for intent-aug:
+- `initial + intent-aug`: look_at_obj_in_light `16/18 = 0.889`, pick_and_place `11/14 = 0.786`
+- `step1 best + intent-aug`: look_at_obj_in_light `13/18 = 0.722`, pick_and_place `7/14 = 0.500`
+
+Feedback diagnostics:
+- `initial + intent-aug`: 432 steps, 362 extracted intentions; statuses `unfulfilled=252`, `fulfilled=74`, `unclear=106`.
+- `step1 best + intent-aug`: 547 steps, 478 extracted intentions; statuses `unfulfilled=366`, `fulfilled=73`, `unclear=108`.
+
+Interpretation:
+1. Feedback augmentation clearly helps base 4B execution on this 32-task valid-unseen subset: `+7/32` hard and lower mean turns compared with raw.
+2. SkillOpt can accept an update under v4, and the accepted skill has modest raw-feedback transfer: `+3/32` hard over initial raw.
+3. The accepted skill does not combine well with augmentation. It mostly adds generic strict navigation / avoid-revisit / immediate-pickup rules; under repeated `unfulfilled` feedback, the agent becomes more prone to over-searching and loops. The failure is especially visible on pick_and_place tasks.
+4. Mechanism implication: the next useful change should not rewrite SkillOpt broadly. The narrow fix is to normalize the intention signal into short action-level expected outcomes before EFM refinement, so feedback distinguishes action execution/result mismatch from broad task-search failure and gives SkillOpt less incentive to learn generic search heuristics.
+
+
+## 2026-07-05 Intra Activation Steering Prototype
+
+目标：
+围绕 Steering-Mediated Skill Self-Evolution 先建立最小 steering prototype：能从 positive/negative behavioral activations 得到 steering vector，能把 vector 注入模型层，能观察到模型行为变化，最好在一个受控任务上提升指标。
+
+做成了什么：
+- 新增 `research/steering/`：
+  - `vectors.py`：padding-aware mean pooling；positive-minus-negative oriented PCA / mean-diff steering vector。
+  - `hooks.py`：HF-style transformer layer activation hook，支持 `model.model.layers`、`model.language_model.layers`、`model.model.language_model.layers`、`model.transformer.h`。
+  - `run_intra_action_steering.py`：真实 HF causal LM action-selection runner，内置 procedural action micro-benchmark，输出 alpha sweep、prediction jsonl 和 `steering_vector.pt`。
+  - `run_tiny_intra_steering_smoke.py`：当 HF-loadable LLM 不可用时的 tiny-model steering smoke。
+  - `README.md`：运行命令、产物和解释边界。
+- 新增 `tests/research/steering/`，覆盖 PCA 方向、padding pooling、activation hook 行为。验证命令 `envs/skillopt-qwen35-vllm-cu128/bin/python -m pytest tests/research/steering -q` 通过：`3 passed`。
+
+实验结果：
+- 真实本地 LLM 路线当前被环境约束阻塞：
+  - `models/Qwen3.5-4B` 是完整 checkpoint，但当前 HF `transformers` 不识别 `qwen3_5` 架构，`AutoModelForCausalLM` 失败。
+  - `models/Qwen3-32B-AWQ` 是完整 AWQ checkpoint，但当前 env 缺 `auto-awq`，HF 不能加载。
+  - `models/Qwen3-32B` 是 HF 支持的 `qwen3`，但目录只有 `model-00001-of-00017`，checkpoint 不完整。
+  - lab-50 直接下载 `Qwen/Qwen2.5-0.5B-Instruct` 失败，原因是远端 `huggingface.co` `Network is unreachable`；升级权限重试后仍失败。
+- tiny smoke 产物：`research/steering/runs/tiny_intra_smoke_20260705_v2/summary.json`。
+  - baseline accuracy：`22/40 = 0.55`
+  - best steering alpha：`1.0`
+  - steered accuracy：`39/40 = 0.975`
+  - delta accuracy：`+0.425`
+  - prediction changes vs baseline：`17`
+
+发现的问题：
+- 目前已经证明工程闭环：intra positive/negative activations -> PCA steering vector -> layer hook -> behavior changes -> controlled metric improves。
+- 但 tiny smoke 不是 LLM agent 证据；它只证明 steering pipeline 和注入机制可用。
+- 下一步要拿真实 LLM 结果，需要先解决一个模型可加载入口：安装/准备 `auto-awq` 跑 Qwen3-32B-AWQ，或补齐/下载一个 HF-standard 小模型，或获得支持 `qwen3_5` 的 transformers/runtime。
+
+下一步：
+优先让 `run_intra_action_steering.py` 在一个真实 HF-loadable instruct model 上跑通 alpha sweep；成功标准是 `alpha=0` 到某个正 alpha 出现 action-selection accuracy 或 correct-minus-wrong margin 的稳定提升，并保留 per-case prediction changes。
+
+
+## 2026-07-06 Qwen3-4B Intra Steering Alpha Sweep
+
+目标：
+用真实 HF-loadable `Qwen3-4B-Instruct-2507` 跑 `research/steering/run_intra_action_steering.py`，验证 intra steering vector 是否能改变模型行为，并观察是否提升 action-selection 性能。
+
+做成了什么：
+- 确认模型目录 `/data5/ninghan/tlm/models/Qwen3-4B-Instruct-2507` 完整：3/3 safetensors shard、`model.safetensors.index.json`、tokenizer 和 config 均存在；HF config/tokenizer 加载通过，模型类型 `qwen3`，36 layers，hidden size 2560。
+- 初始 run：`research/steering/runs/intra_action_qwen3_4b_2507_layer24_20260706`。在原始标签下 baseline 为 `10/16`，各 alpha 未提升 accuracy。
+- 调试发现 eval case 标签 bug：若干 `good_is_a=True` case 的 bad/good action 传参写反，例如 `kettle_heat`、`mug_sink`、`coffee_machine`。该 bug 使旧的 `10/16 -> 12/16` 结果不可作为有效提升证据。
+- 增加测试并修复标签：`envs/skillopt-qwen35-vllm-cu128/bin/python -m pytest tests/research/steering -q` 通过 `5 passed`。
+- 新增 `--prompt-style neutral`，用于去掉显式 anti-repeat/no-op 指导，测试是否原 prompt 过于简单。
+
+修正标签后的结果：
+- Guided prompt run：`research/steering/runs/intra_action_qwen3_4b_2507_pca_layer16_fixedlabels_20260706`
+  - baseline accuracy：`16/16 = 1.0`
+  - best alpha：`-10`
+  - best accuracy：`16/16 = 1.0`
+  - best margin：`25.67`，baseline margin：`25.45`
+  - 强 steering 会改变行为并退化：例如 `alpha=-60/-70/-80/-90` 为 `6/16`
+- Neutral prompt run：`research/steering/runs/intra_action_qwen3_4b_2507_pca_layer16_neutral_fixedlabels_20260706`
+  - baseline accuracy：`16/16 = 1.0`
+  - best alpha：`-20`
+  - best accuracy：`16/16 = 1.0`
+  - best margin：`28.38`，baseline margin：`26.91`
+  - 说明 steering 能提高正确选项 logprob margin，但当前 16-case benchmark 已到 accuracy ceiling，无法证明 accuracy 提升。
+
+发现的问题：
+- 真实 Qwen3-4B 路径已跑通；现在缺的不是模型加载，而是更有区分度的 evaluation set。
+- 当前 micro-benchmark 对 Qwen3-4B 太容易，修正标签后 baseline 已满分；因此只能证明 steering 改变 hidden-state behavior / margin，不能证明 accuracy gain。
+- 强 alpha 可以显著改变模型决策，但过强会退化，说明 layer hook 生效，alpha 需要 gate 或 validation sweep。
+
+下一步：
+构造更难、更接近 rollout 的 steering eval：从 ALFWorld/GIAI2 真实失败 step 抽取 original action、candidate repair action 和环境反馈，避免人工 toy cases 的 ceiling；成功标准应从 `accuracy` 扩展为 `invalid/repeat/no-op 修复率 + correct-minus-wrong margin + held-out task success`。
+
+
+## 2026-07-06 ALFWorld Trace Steering Prototype
+
+目标：
+把 steering prototype 从 toy action cases 推进到真实 ALFWorld 轨迹：从 `.efm.json` step trace 中抽 positive/negative behavior states，构造 steering vector，并在 held-out episode 的 offline repair action-selection 上评估。
+
+做成了什么：
+- 重构 `research/steering/`：
+  - `schema.py`：`ChoiceCase` / `SteeringDataset` 数据结构。
+  - `prompts.py`：behavior-state 与 A/B action-choice prompt。
+  - `engine.py`：模型加载、hidden-state 表示抽取、alpha sweep、产物落盘。
+  - `toy_cases.py`：原 toy 数据独立出来，旧 `run_intra_action_steering.py` 只保留兼容 CLI。
+  - `alfworld_cases.py`：从 ALFWorld EFM traces 抽 positive/negative states 与 held-out repair cases。
+  - `run_alfworld_steering.py`：ALFWorld trace steering CLI。
+- 测试覆盖增加到 `8 passed`，包括 ALFWorld repeated-action 抽取、episode-level train/eval split、prompt style 和原 vector/hook 测试。
+
+抽取规则：
+- 输入：`benchmarks/skillopt/outputs/idea_alfworld_32b_efm_constfix_run2_20260627/feedback/*.efm.json`
+- Positive states：非重复、`signal_type in {progress, state_change}`，且 action 不是低信息 `look/inventory`。
+- Negative states：重复 action，或 `signal_type in {constraint_violated, ambiguity, invalid, no_progress, error}`。
+- Eval case：在 held-out episode 中，用 negative step 的 action 作为 bad option，用同一 episode 后续第一个非重复 positive action 作为 repair option。
+- Split：100 episodes 按 episode id 排序，70 train episodes 用于 vector，30 held-out episodes 用于 eval cases。
+
+关键 run：
+`research/steering/runs/alfworld_qwen3_4b_constfix_pca_l16_neutral_split70_20260706`
+
+设置：
+- Model：`models/Qwen3-4B-Instruct-2507`
+- Layer：`16`
+- Method：`pca`
+- Prompt style：`neutral`
+- Train states：`96 positive / 96 negative`
+- Eval cases：`64`
+- Alpha sweep：`-160,-140,-120,-100,-80,-60,-40,-20,0,20,40,60,80,100,120`
+
+结果：
+- Baseline `alpha=0`：`29/64 = 0.453125`
+- Best `alpha=-40`：`39/64 = 0.609375`
+- Delta：`+10/64 = +0.15625`
+- Prediction changes vs baseline：`14`
+- Changed-case decomposition：`12` fixed, `2` broken
+- Mean correct-minus-wrong margin：baseline `-1.094` -> best `+1.274`
+
+解释边界：
+- 这已经是“真实 ALFWorld trace -> steering vector -> held-out offline action-selection gain”的证据，不再是 toy smoke。
+- 但它仍不是 full ALFWorld rollout success gain：repair option 来自同一 held-out episode 的未来 progress action，相当于离线反事实选择任务，不等于 agent 真正在环境中 rollout 后会成功。
+- 负 alpha 最优说明当前 PCA 向量的符号与“更好 repair choice”方向相反；这不影响 steering 生效性，但下一步需要在 validation split 上自动选 alpha/sign。
+
+下一步：
+把 offline choice eval 接到真正 rollout：在 ALFWorld agent 每一步对候选动作或 token generation 注入 selected steering vector，先做小 batch A/B：unsteered vs steered，指标看 repeat/no-op/constraint violation rate、episode success、turn count。
+
+## 2026-07-06 — True ALFWorld HF Rollout Steering Smoke
+
+Question: can the ALFWorld intra steering vector that improved offline action-choice accuracy be applied inside a real ALFWorld rollout with a locally loaded HF model, and does it change or improve task behavior?
+
+Implementation:
+- Added `research/steering/rollout_hf.py` with reusable HF chat generation, activation steering hook integration, response normalization, vector loading, and trace metrics.
+- Added `research/steering/run_alfworld_hf_rollout.py`, a real ALFWorld runner that reuses SkillOpt's `build_alfworld_env` and TextWorld step/projection path but replaces the HTTP `chat_target` backend with local HF generation so hidden-state steering is possible.
+- Added `tests/research/steering/test_rollout_hf.py`; steering test suite passes: `13 passed`.
+
+Setup:
+- Model: `models/Qwen3-4B-Instruct-2507` loaded via HF BF16 on GPU 2.
+- Vector: `research/steering/runs/alfworld_qwen3_4b_constfix_pca_l16_neutral_split70_20260706/steering_vector.pt`, layer 16.
+- Environment: real ALFWorld valid_unseen gamefiles from `benchmarks/skillopt/outputs/skillopt4b_promptv4_initial_raw_test32/results.jsonl`.
+- Generation: greedy, `max_new_tokens=768`; shorter 128-token smoke truncated before `<action>` and caused fallback `look`, so 768 is the usable smoke setting.
+
+Results:
+- `research/steering/runs/alfworld_hf_rollout_smoke_1ep5step_t768_20260706`: baseline and steered both 0/1 success, but paired action changed on 4/5 steps with no invalid actions.
+- `research/steering/runs/alfworld_hf_rollout_2ep10step_t768_a-40_20260706`: baseline 1/2 success, steered alpha=-40 0/2 success; paired actions changed on 15/18 comparable steps; invalid actions stayed 0, repeated actions increased from 1 to 7.
+- `research/steering/runs/alfworld_hf_rollout_2ep10step_t768_a40_20260706`: steered alpha=+40 0/2 success; invalid actions 0, repeated actions 3.
+
+Evidence boundary:
+- Established: true activation steering is wired into real ALFWorld rollout and changes environment-facing valid actions under the same task/skill/model.
+- Not established: task-level improvement in free-generation rollout. The offline choice-task best alpha (-40) does not directly transfer; in this small real rollout it hurts success and increases repetition.
+- Next smallest useful step: tune rollout-specific steering application, especially token slice and alpha grid, instead of assuming the offline choice vector/alpha is deployable as-is.
+
+## 2026-07-06 — Clean ALFWorld Multi-Layer Steering Prototype
+
+Question: can we remove EFM/SkillOpt-skill confounds and run activation steering directly on official ALFWorld with HF Qwen3-4B, using NPM-style middle-to-late layers 17-19?
+
+Implementation:
+- Added `research/steering/clean_alfworld.py` for clean prompt construction, exact admissible-action projection, env-only trajectory labeling, and paired-result summaries.
+- Added multi-layer hook support in `research/steering/hooks.py` via `MultiLayerActivationSteerer`.
+- Added `research/steering/run_clean_alfworld_steering.py`, which uses official `alfworld.agents.environment.get_environment` and does not import `skillopt.envs.alfworld.rollout`; the only reused artifact is the ALFWorld config/data path.
+- Added tests for clean prompt boundaries, env-only labeling, exact admissible-action fallback parsing, and multi-layer hook behavior. Verification: `envs/skillopt-qwen35-vllm-cu128/bin/python -m pytest tests/research/steering -q` -> `20 passed`.
+
+Clean setting:
+- Model: `models/Qwen3-4B-Instruct-2507` loaded via HF BF16.
+- Layers: `17,18,19`.
+- No EFM traces, no EFM runtime, no SkillOpt skill injection, no SkillOpt rollout wrapper.
+- Prompt includes only task, recent history, current observation, admissible actions, and output format.
+- Clean vector source: baseline clean rollout labels. Positive uses terminal success when available; because first clean smokes had no success, weak positive uses env-only first-time valid non-low-information actions. Negative uses invalid, repeated, low-information loops, and timeout-tail behavior.
+
+Smoke evidence:
+- Initial clean look-at-light smoke on first 2 valid_unseen tasks failed vector construction: baseline 0/2 success, positive=0, negative=16; invalid actions remained high even after parser fix.
+- Pick-and-place smoke: `research/steering/runs/clean_alfworld_smoke_pickplace_2ep15step_a5_weakpos_20260706`.
+  - Gamefiles: manifest offset 19-20, `pick_and_place_simple-Mug-None-Desk-308`.
+  - Baseline: 0/2 success, mean_turns=15, invalid_actions=5, repeated_actions=0.
+  - Clean vector artifact: `clean_steering_vectors.pt`, layers `[17,18,19]`, each vector shape `(2560,)`, 5 positive texts / 25 negative texts.
+  - Alpha 5: 0/2 success, mean_turns=15, invalid_actions=4, repeated_actions=0, paired_action_changes=10/30.
+
+Evidence boundary:
+- Established: clean ALFWorld steering path works without EFM, without SkillOpt skill, and without SkillOpt rollout wrapper; multi-layer steering at Qwen3-4B layers 17-19 changes real environment-facing actions.
+- Not established: task-level improvement. Clean prompting makes the baseline policy weak and often loops, so the current clean vector mostly proves behavioral controllability, not performance gain.
+- Next smallest useful step: improve clean baseline action selection without adding learned skill, likely via stricter action-only decoding/reranking over admissible actions, then rerun alpha grid on 10-20 episodes.
+
+## 2026-07-06 — SkillOpt Skill-Edit to Steering V1 Smoke
+
+Question: can a text-space SkillOpt edit from a deliberately rough ALFWorld skill be distilled into an activation-space steering vector?
+
+Implementation:
+- Added rough initial skill: `benchmarks/skillopt/skillopt/envs/alfworld/skills/rough_v1.md`.
+- Added paired old/new rollout parser: `research/steering/skill_edit_cases.py`.
+- Added skill-edit vector runner: `research/steering/run_skill_edit_steering.py`.
+- Added tests: `tests/research/steering/test_skill_edit_cases.py` and `tests/research/steering/test_skill_edit_runner.py`.
+- Wrote design/plan:
+  - `docs/superpowers/specs/2026-07-06-skill-edit-steering-v1-design.md`
+  - `docs/superpowers/plans/2026-07-06-skill-edit-steering-v1.md`
+
+SkillOpt update artifact:
+- Run: `benchmarks/skillopt/outputs/skill_edit_v1_rough_train_20260706b`.
+- Initial rough skill selection score: `4/6 = 0.6667`.
+- Step 1 training rollout: `0/4`, giving failure signal.
+- Optimizer proposed 2 edits, expanding skill length `290 -> 1127`.
+- Candidate path: `benchmarks/skillopt/outputs/skill_edit_v1_rough_train_20260706b/steps/step_0001/candidate_skill.md`.
+- Gate result: rejected, candidate selection `3/6 = 0.5000 <= current 4/6 = 0.6667`.
+- Evidence boundary: this is a SkillOpt-generated text edit, not an accepted SkillOpt best-skill update.
+
+HF paired rollout traces:
+- Old rough skill: `research/steering/runs/skill_edit_v1_rough_hf_6ep_20260706`.
+  - 6 look-at-light valid_unseen episodes, `0/6` success, `5` repeated actions, `0` invalid actions.
+- Candidate skill: `research/steering/runs/skill_edit_v1_candidate_hf_6ep_20260706`.
+  - Interrupted after usable partial traces; reconstructed `baseline/results_partial.jsonl`.
+  - 4 completed paired episodes, `1/4` success, `2` repeated actions.
+
+Vector extraction:
+- Dataset: same task type `look_at_obj_in_light`.
+- Old states: 64 selected from 72 candidates.
+- New states: 45 selected from 45 candidates.
+- Matched eval cases: 43 exact old/new action choices.
+- Vector: layer 16, `mean_delta = mean(h_new) - mean(h_old)`, normalized.
+
+Results:
+- Edit vector: `research/steering/runs/skill_edit_v1_edit_mean_delta_l16_20260706`
+  - Baseline alpha 0: `15/43 = 0.3488`.
+  - Best alpha `-60`: `23/43 = 0.5349`, delta `+8/43 = +0.1860`.
+  - Best margin: `+1.0407`.
+  - Prediction changes vs baseline: `20`.
+- Random vector: `research/steering/runs/skill_edit_v1_random_mean_delta_l16_20260706`
+  - Best `23/43 = 0.5349`, best margin `+0.7789`.
+- Unrelated ALFWorld vector: `research/steering/runs/skill_edit_v1_unrelated_mean_delta_l16_20260706`
+  - Best `24/43 = 0.5581`, best margin `+0.1863`.
+
+Interpretation boundary:
+- Established: the old/new skill-edit delta produces a real activation steering signal on paired offline action-choice cases; it improves accuracy and margin over alpha 0.
+- Not established: edit-vector specificity. Random and unrelated controls also improve accuracy on this small set, though the edit vector has the strongest margin among the tested vectors.
+- Not established: accepted SkillOpt self-evolution. The first candidate was rejected by selection gate; the vector smoke uses a rejected but SkillOpt-generated candidate edit.
+- Next step: build a harder and less steering-generic evaluation split, preferably with held-out same-class tasks where random/unrelated vectors are tuned only on a validation subset, then rerun vector controls and full rollout smoke.
+
+## 2026-07-06 - Skill-edit steering v2 same-class prototype
+
+- Scope: ALFWorld `look_at_obj_in_light` only; filtered split at `benchmarks/skillopt/data/alfworld_path_split_look_light_v2`.
+- SkillOpt reproduction on same-class selection generated edits but gate rejected: current `1/3`, candidate `1/3`; artifacts in `benchmarks/skillopt/outputs/skill_edit_v2_skillopt_light_gate_20260706b`.
+- Manual old/new validation under Qwen3.5-4B vLLM: old valid_unseen `4/18 = 0.2222`, manual new valid_unseen `17/18 = 0.9444`.
+- Added NPM-style extraction code for inter-trajectory and intra step-group vectors; extraction run `research/steering/runs/npm_skill_memory_light_l16_mean_diff_20260706` produced `inter_traj_vector.pt` and `intra_step_vector.pt`.
+- HF rollout steering boundary: local `models/Qwen3-4B-Instruct-2507` does not reproduce the vLLM manual-new upper bound. Inter vector worsened repetition; intra vector reduced repeated actions from 65 to 57 on 6 old-skill HF episodes but did not improve success.
+- Full summary: `research/steering/skill_edit_v2_summary_20260706.md`.
+
+## 2026-07-06 - Qwen3.5 HF same-model steering follow-up
+
+- HF Qwen3.5 load is possible using isolated transformers main at `.tmp/transformers_main_20260706`; release transformers in the existing env does not recognize `qwen3_5`.
+- Same-model positive-control holds on Qwen3.5 HF: old skill `1/6`, manual new skill `3/6` on the first six `look_at_obj_in_light` valid_unseen tasks.
+- Re-extracted Qwen3.5 HF vectors in `research/steering/runs/qwen35_npm_skill_memory_light_l16_mean_diff_6ep_20260706`.
+- All-token inter steering is destructive (`0/6`, repeated actions `136`). Last-token inter steering is the best current setting (`1/6`, repeated actions `22` vs old baseline `26`) but does not improve success. Intra vectors do not improve success.
+- Updated summary: `research/steering/skill_edit_v2_summary_20260706.md`.
+
+
+## 2026-07-07 SkillOpt ALFWorld GPT-5.5 optimizer reproduction smoke/light
+
+Question: whether the OpenAI-compatible GPT-5.5 endpoint can reproduce SkillOpt-style ALFWorld skill updates with Qwen3.5-4B as the target agent, after previous Qwen optimizer runs often failed to pass the gate.
+
+Setup: benchmark repo `/data5/ninghan/tlm/benchmarks/skillopt`; optimizer `gpt-5.5` via `https://newapi.metamind.work/v1` with `openai_compatible` auth and no proxy; target `Qwen/Qwen3.5-4B` on local vLLM port 8007; seed skill `skillopt/envs/alfworld/skills/rough_v1.md`; raw env feedback, EFM/feedback augmentation disabled.
+
+Evidence:
+- API smoke succeeded before training: `chat_optimizer` using `openai_chat` returned valid JSON from `gpt-5.5`.
+- Full update-chain smoke: `benchmarks/skillopt/outputs/skillopt_gpt55_raw_light_smoke_20260707_tmux1`. GPT-5.5 produced 2 edits, merge/rank/update applied them, candidate skill evaluated, but tied selection and was rejected: baseline/candidate selection hard `0.5 -> 0.5`.
+- Low-budget light SkillOpt run: `benchmarks/skillopt/outputs/skillopt_gpt55_raw_light_lowbudget_20260707_1`. On `data/alfworld_path_split_look_light_v2`, baseline selection hard `0.3333`; step1 accepted to `0.6667`; step5 accepted to `1.0000`; final summary `steps=5 accept=2 reject=1 skip=2`, best step 5.
+- Held-out light test18: `benchmarks/skillopt/outputs/eval_gpt55_raw_light_initial_vs_best_test18_20260707_2`. Initial rough skill hard `5/18 = 0.2778`; GPT-5.5 SkillOpt best hard `15/18 = 0.8333`.
+
+Boundary: this is a light-task subset reproduction, not yet the full mixed ALFWorld split. It establishes that the GPT-5.5 optimizer path can pass the SkillOpt gate and transfer to held-out light tasks with the Qwen3.5-4B target.
+
+## 2026-07-07 SkillOpt ALFWorld GPT-5.5 raw full-split low-budget reproduction
+
+Question: can SkillOpt be reproduced with the paper-aligned role split (GPT-5.5 optimizer, frozen Qwen3.5-4B target) on ALFWorld without any EFM/intent feedback augmentation?
+
+Setup: benchmark repo `/data5/ninghan/tlm/benchmarks/skillopt`; optimizer `gpt-5.5` via OpenAI-compatible endpoint; target `Qwen/Qwen3.5-4B` on local vLLM port 8007; raw environment feedback only (`feedback_enabled=false`); seed skill `skillopt/envs/alfworld/skills/rough_v1.md`; split `data/alfworld_path_split` with train=39, val=18, test=134. Low-budget settings: one epoch, train_size=8, batch_size=1, minibatch_size=1, edit_budget=2, constant LR, no slow/meta skill. This is a low-budget reproduction, not the full paper default run.
+
+Training artifact: `benchmarks/skillopt/outputs/skillopt_gpt55_raw_full_lowbudget_20260707_1`.
+- Baseline selection hard: `4/6 = 0.6667`.
+- Step 1 accepted new best: selection hard `5/6 = 0.8333`; later steps were rejected or skipped.
+- Final summary: `steps=8 accept=1 reject=5 skip=2`, best step 1, total wall time 3636.9s, total tokens 848,227.
+- Best skill learned generic ALFWorld rules, not selection-specific memorization: target-object discipline and clean-then-place sequencing.
+
+Held-out test32 artifact: `benchmarks/skillopt/outputs/eval_gpt55_raw_full_initial_vs_best_test32_20260707_1`.
+- Initial rough skill: hard `16/32 = 0.5000`, mean turns `21.22`, success mean turns `12.44`.
+- GPT-5.5 SkillOpt best: hard `22/32 = 0.6875`, mean turns `17.47`, success mean turns `11.77`.
+- Delta: `+18.75` hard-success points and `-3.75` mean turns on the same held-out test32.
+
+Boundary: this validates the raw SkillOpt reproduction path under a low-budget subset. It should not be conflated with the separate EFM/intent-aug research line; that line was stopped after noticing the scope mix-up.
+
+
+## 2026-07-07 SkillOpt ALFWorld GPT-5.5 raw full-split paper-ish gate run
+
+Question: can the paper-aligned SkillOpt role split reproduce accepted skill self-evolution on the mixed ALFWorld split when the optimizer is GPT-5.5 and the frozen executor is Qwen3.5-4B, without EFM or intent feedback augmentation?
+
+Setup: repo `/data5/ninghan/tlm/benchmarks/skillopt`; run artifact `benchmarks/skillopt/outputs/skillopt_gpt55_raw_full_paperish_gate_w2_20260707_1`; optimizer `gpt-5.5` via OpenAI-compatible endpoint; target `Qwen/Qwen3.5-4B` on vLLM `127.0.0.1:8007`; raw feedback only (`feedback_enabled=false`); split `data/alfworld_path_split`; seed skill `skillopt/envs/alfworld/skills/rough_v1.md`; train_size=16, batch_size=4, 2 epochs, 8 total update steps, workers=2, max_steps=30, `use_gate=true`, `use_slow_update=false`, `use_meta_skill=true`.
+
+Training result:
+- Selection baseline: `5/12 = 0.4167`.
+- Accepted steps: step1 `0.5000`, step2 `0.5833`, step8 `0.6667`.
+- Rejected steps: step3 tied current at `0.5833` and was rejected; steps4/5 had high train-rollout hard `0.75` but lower selection `0.5000` and were rejected; steps6/7 rejected. This confirms the selection gate was active.
+- Best skill: `benchmarks/skillopt/outputs/skillopt_gpt55_raw_full_paperish_gate_w2_20260707_1/best_skill.md` (generic ALFWorld search/action rules, not split-id memorization).
+- Meta-skill epoch2: current epoch memory rollout `11/20 = 0.55` vs previous `8/20 = 0.40`; meta result written to `meta_skill/epoch_02/meta_skill_result.json`.
+
+Held-out test32 eval on `valid_unseen` / `split=test`, same 32 tasks and raw feedback:
+- Initial rough skill: `benchmarks/skillopt/outputs/eval_gpt55_raw_initial_test32_20260707`, hard `15/32 = 0.4688`, mean turns `21.56`, success mean turns `12.00`.
+- SkillOpt step8 best: `benchmarks/skillopt/outputs/eval_gpt55_raw_best_step8_test32_20260707`, hard `21/32 = 0.6562`, mean turns `16.22`, success mean turns `9.00`.
+- Delta: `+6/32 = +18.75` hard-success points, `-5.34` mean turns, `-3.00` success mean turns.
+- By task type: `look_at_obj_in_light` improved `7/18 -> 13/18` with mean turns `23.61 -> 14.28`; `pick_and_place` stayed `8/14 -> 8/14` with mean turns `18.93 -> 18.71`.
+
+Sanity checks and caveats:
+- Grep over config/log/eval artifacts found no EFM, intent augmentation, `feedback_summary`, `intention_status`, or `execution_diagnosis` markers.
+- The log header prints `[slow update] acceptance=force-accept (unconditional)` even though `slow_update: False`; actual step records reject tied/worse candidates, so this appears to be a misleading stale log line rather than force-accept behavior.
+- A 4-worker route was avoided after previous worker-boundary stalls; this stable reproduction used `ALFWORLD_WORKER_START_METHOD=spawn` and `workers=2`.
+
+Boundary: this is still low-budget relative to a full paper-scale benchmark, but it is a successful raw SkillOpt reproduction on the mixed ALFWorld split: GPT-5.5 optimizer passes the gate, produces generic skill updates, and transfers to a held-out valid_unseen test32 subset with both higher success and fewer turns.
+
+## 2026-07-08 SkillOpt accepted-edit steering vector extraction smoke
+
+Question: whether atomic SkillOpt accepted edits can be represented as stable activation directions before any downstream steering/vector composition experiment.
+
+Setup:
+- Base run: `benchmarks/skillopt/outputs/skillopt_gpt55_raw_full_paperish_gate_w2_20260707_1`.
+- Atomic edit pairs materialized under `research/steering/runs/skill_edit_suite_gpt55_20260708/skills`.
+- Evaluated three prioritized edits with S-/S+ counterfactual rollouts:
+  - `e_light_hold_then_lamp`: S-=`skill_v0001`, S+=S- plus the step2 light-task replacement.
+  - `e_pickup_precise`: S-=`skill_v0002`, S+=S- plus the step8 precise pickup/hands-full rule.
+  - `e_cool_fridge`: S-=`skill_v0002`, S+=S- plus the step8 cooling recipe.
+- Target model: `models/Qwen3.5-4B`, HF rollout, layer 16, last-token hidden-state pooling.
+- Case sources:
+  - light: `research/steering/runs/skill_edit_suite_gpt55_20260708/cases/light_test32_first8.jsonl`
+  - pickup: `research/steering/runs/skill_edit_suite_gpt55_20260708/cases/pick_place_test32_first8.jsonl`
+  - cool: `research/steering/runs/skill_edit_suite_gpt55_20260708/cases/cool_valid_unseen_first8.jsonl`
+- GPT-5.5 node labeler produced intra node pairs in `research/steering/runs/skill_edit_suite_gpt55_20260708/paired_rollouts_merged/llm_node_labels.jsonl`.
+
+Rollout observations:
+- `e_light_hold_then_lamp`: S- 3/8, mean turns 22.375; S+ 3/8, mean turns 20.625. Same success count but slightly fewer turns.
+- `e_pickup_precise`: S- 4/8, mean turns 16.5; S+ 3/8, mean turns 17.125. No execution improvement in this case subset.
+- `e_cool_fridge`: S- 1/8, mean turns 23.625; S+ 1/8, mean turns 23.875. One case was repaired by S+, one prior success regressed.
+
+Vector extraction artifacts:
+- Merged paired rollouts: `research/steering/runs/skill_edit_suite_gpt55_20260708/paired_rollouts_merged/paired_rollouts.jsonl`.
+- Vectors and figures: `research/steering/runs/skill_edit_suite_gpt55_20260708/vectors_l16_last`.
+- Instance vectors: 59 total = 24 inter + 35 intra.
+- Intra labels: light 19 pairs, pickup 0 pairs, cool 16 pairs.
+- Mean pairwise cosine within instance sets:
+  - light inter -0.0108, light intra 0.0523
+  - pickup inter 0.0415
+  - cool inter 0.0432, cool intra 0.0121
+- Pooled cosine highlights:
+  - light inter vs light intra: -0.010
+  - cool inter vs cool intra: 0.155
+  - light inter vs cool inter: -0.208
+
+Evidence boundary:
+- The pipeline now works end-to-end for atomic SkillOpt edit -> paired rollout -> GPT-5.5 node labels -> inter/intra vectors -> PCA/cosine visualization.
+- This first last-token/layer16 extraction does not show strong edit-level clustering. The result weakens the assumption that a natural-language skill edit automatically maps to a clean single direction under naive trajectory/node mean-difference pooling.
+- Pickup generated no reliable GPT-5.5 intra pairs on the chosen pick-and-place subset, so it currently only has an inter trajectory vector.
+
+Next technical decision:
+- Improve extraction before steering intervention: try mean-token pooling and/or aligned decision-state prompts; restrict node pairs to same semantic phase; consider filtering inter pairs to cases where S+ changes outcome or key behavior.
+
+### Correction: performance-delta hidden-state PCA for SkillOpt initial -> best
+
+Follow-up to the 2026-07-08 skill-edit vector extraction smoke. The previous atomic-edit S-/S+ sampling used fixed first-8 task subsets and included many neutral/regressive pairs, so positive/negative hidden states were not expected to separate well. This was a sampling/design error for the representation-probe stage.
+
+Corrected probe:
+- Reused existing `eval_gpt55_raw_full_initial_vs_best_test32_20260707_1` artifacts; no new ALFWorld rollout.
+- Positive examples: trajectories from the better skill (`best`) that succeeded.
+- Negative examples: trajectories from the earlier skill (`initial`) that failed.
+- Also included a stricter repaired-pair subset: same task id where `initial` failed and `best` succeeded.
+- Model/layer: `models/Qwen3.5-4B`, layer 18, last-token hidden state over rendered trajectory text.
+- Script: `research/steering/skill_edit/run_performance_delta_hidden_pca.py`.
+- Output: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/initial_best_pos_neg_pca_layer18.png`.
+
+Counts and separation:
+- repaired_all: pos=8, neg=8, centroid cosine 0.7784
+- repaired_light: pos=6, neg=6, centroid cosine 0.7579
+- all_success_vs_failure: pos=22, neg=16, centroid cosine 0.7655
+- light_success_vs_failure: pos=11, neg=12, centroid cosine 0.7449
+
+Evidence boundary:
+- This corrected sampling produces much clearer pos/neg PCA separation than the atomic-edit first-8 sampling, whose centroid cosines were around 0.98.
+- It supports using performance-delta-selected trajectories as the first steering-vector extraction source before trying narrower atomic edit vectors.
+
+### Intra visualization for corrected performance-delta repaired pairs
+
+Follow-up after approving intra visualization for the corrected `initial fail -> best success` same-game pairs.
+
+Setup:
+- Built paired data from existing `eval_gpt55_raw_full_initial_vs_best_test32_20260707_1` artifacts.
+- Pairs: 8 repaired same-game pairs, 6 `look_at_obj_in_light` and 2 `pick_and_place`.
+- Pair file: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/intra/repaired_paired_rollouts.jsonl`.
+- GPT-5.5 node labeler: `repaired_intra_node_labels.jsonl`.
+- Labels: 32 intra node pairs, mean confidence 0.8738, min confidence 0.72.
+- Hidden states: Qwen3.5-4B, layer 18, last-token pooling.
+
+Artifacts:
+- Intra pos/neg hidden-state PCA: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/intra/repaired_intra_pos_neg_hidden_pca_layer18.png`.
+- Inter/intra delta vector PCA: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/intra/vectors_l18_last/figures/pca_skill_edit_instances.png`.
+- Extracted vectors: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/intra/vectors_l18_last/vectors`.
+
+Results:
+- Intra hidden-state pos/neg centroid cosine: 0.9936, so node-level positive and negative states do not separate well under this rendering/pooling.
+- Inter delta vectors for the 8 repaired full trajectories cluster much better: mean pairwise cosine 0.5876.
+- Intra delta vectors are scattered: mean pairwise cosine 0.0287.
+
+Interpretation:
+- Corrected performance-delta sampling strongly improves inter trajectory-level separation.
+- The current GPT-5.5 node-pair based intra representation is not yet clean. It may need better semantic alignment, stricter phase-specific node pairing, action-decision-only rendering, or different pooling/layer choices before using it for steering.
+
+### Raw-trajectory-only inter hidden-state visualization
+
+Question:
+- Does inter positive/negative separation remain after removing explicit skill and outcome labels from the representation input?
+
+Setup:
+- Input contains only `Task`, followed by alternating rollout `Action` and environment `State` text.
+- Explicitly excluded: skill text/version, plus/minus side, outcome, turns, reward, done, and valid.
+- The old artifacts do not store the reset-time initial observation, so the sequence starts at the first action and its resulting state.
+- Hidden states: Qwen3.5-4B, layer 18, last-token pooling.
+- Positive trajectories: successful best-skill rollouts. Negative trajectories: failed initial-skill rollouts.
+
+Results:
+- Repaired exact-task pairs: pos=8, neg=8, centroid cosine=0.8997.
+- Repaired light subset: pos=6, neg=6, centroid cosine=0.8934.
+- All success vs failure: pos=22, neg=16, centroid cosine=0.8465.
+- Light success vs failure: pos=11, neg=12, centroid cosine=0.8583.
+- Figure: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/raw_trajectory_inter_all_l18/initial_best_raw_trajectory_inter_pca_layer18.png`.
+- Metrics: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/raw_trajectory_inter_all_l18/initial_best_raw_trajectory_inter_pca_layer18_metrics.json`.
+
+Evidence boundary:
+- Separation remains without explicit labels and is visually clearer for the larger success/failure sets.
+- This establishes that raw trajectory content contains a success/failure-related inter direction. It does not yet isolate the causal contribution of a specific skill edit.
+
+### Inter ablation: add outcome, reward, and done
+
+Setup:
+- Same samples, Qwen3.5-4B, layer 18, and last-token pooling as the raw-trajectory-only run.
+- Added overall `Outcome` and per-step `Reward` / `Done`.
+- Still excluded skill text/version, plus/minus side, turns, valid, and task type.
+
+Results:
+- Repaired exact-task pairs: centroid cosine 0.8997 -> 0.8222.
+- Repaired light subset: 0.8934 -> 0.8239.
+- All success vs failure: 0.8465 -> 0.7921.
+- Light success vs failure: 0.8583 -> 0.8091.
+- Lower centroid cosine and the PCA plots both show stronger positive/negative separation.
+- Figure: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/raw_plus_outcome_inter_l18/initial_best_raw_plus_outcome_inter_pca_layer18.png`.
+
+Interpretation:
+- Explicit outcome signals materially strengthen clustering.
+- Because last-token pooling is close to the final `Done` field, this ablation measures result-state encoding more than a pure skill-induced behavioral direction.
+
+Visualization update:
+- Replotted both inter ablations from the saved hidden-state tensors; no model forward pass or representation values changed.
+- Added compact 2x2 panels, larger typography, semantic subtitles, legends, grid lines, and per-panel centroid cosine.
+- Raw-only polished figure: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/raw_trajectory_inter_all_l18/initial_best_raw_trajectory_inter_pca_polished_layer18.png`.
+- Raw plus outcome-signals polished figure: `research/steering/runs/skill_edit_suite_gpt55_20260708/performance_delta_clusters/raw_plus_outcome_inter_l18/initial_best_raw_plus_outcome_inter_pca_polished_layer18.png`.
+
+### Step-token mean INTRA: paper-style and atomic skill-edit contrasts
+
+Question:
+- What changes when both intra methods encode a raw trajectory and mean-pool only the target decision tokens?
+
+Implementation:
+- Shared extractor: `research/steering/skill_edit/intra_step_mean.py`.
+- Dual-mode runner: `research/steering/skill_edit/run_intra_step_mean.py`.
+- Representation: task plus raw action/state trajectory; current action token span is mean-pooled. This common span is available in both paper-style and atomic traces, while saved reasoning is not.
+- Skill, side, outcome, reward, done, judge labels, and post-action feedback are excluded from the pooled current-step span.
+- Span audits are saved beside each run.
+
+Paper-style results:
+- Source: 16 failed initial-skill test32 trajectories; 14 contained both effective and degenerate steps.
+- Positive effective steps: 354; negative degenerate steps: 66.
+- Positive/negative centroid cosine: 0.9673.
+- 14 trajectory-level contrast vectors mean pairwise cosine: 0.3020.
+- Within-task contrast cosine: light 0.3807; pick-and-place 0.0981.
+- Artifact: `research/steering/runs/intra_step_mean_20260710/paper_style`.
+- The strong separation shown by the paper was not reproduced on these Qwen3.5-4B SkillOpt traces under the available deterministic step rules.
+
+Atomic skill-edit strict results:
+- Strict filter: S+ improves success, or preserves success with fewer turns.
+- Used 3 game/edit pairs and 8 GPT-5.5-aligned node pairs: 2 light games, 1 cool game.
+- Positive/negative centroid cosine: 0.9410.
+- Three game-level contrast vectors mean pairwise cosine: 0.0079.
+- The two light vectors have cosine -0.0369; one cool vector is insufficient for a within-edit consistency metric.
+- Artifact: `research/steering/runs/intra_step_mean_20260710/skill_edit_strict`.
+
+Atomic skill-edit diagnostic results:
+- Without requiring outcome/turn improvement: 9 game/edit pairs and 24 aligned node pairs.
+- Positive/negative centroid cosine: 0.9760.
+- Game-level contrast mean pairwise cosine: 0.0279.
+- Within-edit cosine: light -0.0125; cool 0.0181.
+- Artifact: `research/steering/runs/intra_step_mean_20260710/skill_edit_all_labeled`.
+
+Evidence boundary:
+- Correct step-token pooling improves the methodological validity but does not create a stable edit direction in the current sample.
+- The strict skill-edit sample is too small for a positive clustering claim, while the larger diagnostic set shows near-zero consistency.
+- Existing traces omit reset-time initial observations; the extractor records this limitation rather than fabricating them.
+- The optimizer endpoint model-list check returned HTTP 401 for both historical credentials, so GPT-5.6 availability could not be verified and the existing GPT-5.5 labels were retained.
+
+### Atomic skill text to INTRA steering alignment
+
+Question:
+- Do the behavioral `S+ step - S- step` vectors align specifically with the text edit that produced the paired rollouts?
+
+Method:
+- Added `research/steering/skill_edit/run_intra_text_alignment.py`.
+- Behavioral direction: equal-weight mean of game-level intra deltas for each atomic edit.
+- Text representations: (1) mean hidden state of the atomic edit text and (2) mean-hidden full-skill difference `plus.md - minus.md`.
+- All representations use Qwen3.5-4B layer 18; alignment is cosine similarity.
+- Cross-edit matrices test whether matching diagonal entries exceed mismatched off-diagonal entries.
+
+Pair audit:
+- Strict set has 3/2/3 aligned nodes in the three retained games, not one node per trajectory.
+- Light pairs mostly follow the edit's pickup/carry/use-lamp chain.
+- In the cool game, only the fridge-protocol pair is a direct edit primitive; search efficiency and final placement are upstream/downstream consequences.
+
+Strict-set alignment:
+- Light: 2 game vectors; within-edit and leave-one-game-out cosine both -0.0369.
+- Cool: 1 game vector, so consistency cannot be estimated.
+- Matching edit-text-to-behavior cosine: cool 0.0045; light 0.0295.
+- Matching full-skill-delta-to-behavior cosine: cool -0.0003; light 0.0440.
+- Edit-text diagonal advantage over mismatched entries: 0.0194.
+- Full-skill-delta diagonal advantage: -0.0005.
+
+All-labeled diagnostic alignment:
+- Light: 4 game vectors, within-edit cosine -0.0125, leave-one-game-out cosine 0.0503.
+- Cool: 5 game vectors, within-edit cosine 0.0181, leave-one-game-out cosine 0.0798.
+- Matching edit-text-to-behavior cosine: cool 0.0795; light -0.0564.
+- Matching full-skill-delta-to-behavior cosine: cool -0.0729; light -0.0591.
+- Edit-text diagonal advantage: -0.0183; full-skill-delta diagonal advantage: -0.0911.
+- Artifact: `research/steering/runs/intra_step_mean_20260710/skill_edit_all_labeled/alignment/text_steering_alignment.png`.
+
+Interpretation:
+- Positive/negative endpoint overlap alone does not invalidate difference vectors, but the current deltas also lack within-edit directional consistency and text-edit specificity.
+- The present evidence does not support a text-skill-to-intra-vector correspondence. More strict repaired games and phase-pure node groups are required before intervention tests can be meaningfully interpreted.
+
+## 2026-07-12 Phase 1 Skill Vectorization Fidelity harness and 6-episode smoke
+
+Question:
+- Can the causal behavior difference between no skill and the seed42 best SkillOpt skill be isolated at deterministic first-fork states with a 2x2 teacher-forced action-span contrast, then partially reproduced by activation steering?
+
+Scope and implementation:
+- Targeted the three test60 classes where seed42 best improved over initial at the full horizon: `look_at_obj_in_light` (5/10 -> 9/10), `pick_and_place` (6/10 -> 7/10), and `pick_two_obj_and_place` (5/10 -> 6/10).
+- Added `research/steering/skill_edit/phase1_fidelity.py` and persisted the pre-action prompt in HF rollout traces.
+- Greedy no-skill / best-skill pairs use the same local `models/Qwen3.5-4B`; only the first action fork is retained, and the pre-action prompt must match exactly.
+- Each node uses the action-span context main effect: `0.5 * [(h(skill,y+) - h(no_skill,y+)) + (h(skill,y-) - h(no_skill,y-))]`, extracted for all 32 layers.
+- Extraction and validation are split within each task type. Candidate middle layers are ranked by node-vector pairwise cosine, then checked at held-out fork states.
+- Focused regression: `tests/research/steering -q` -> `17 passed`.
+
+Smoke artifact:
+- `research/steering/runs/phase1_fidelity_best42_6ep_20260712`.
+- Six paired episodes, two per target class, 10-step collection horizon. No skill succeeded 0/6; best skill succeeded 1/6. The repaired case was `test:pick_and_place_simple:0008`, where no skill timed out and best finished in 7 steps.
+- All 6 pairs produced a first fork and all 6 fork prompts matched exactly.
+- Three stratified extraction nodes gave best middle-layer consistency at layer 10 (mean pairwise cosine 0.4375), followed by layer 14 (0.4103).
+- Held-out fork certification at alpha <=2 recovered 0/3 target actions. At layer 10, alpha 3 recovered 1/3: the repaired mug-to-desk case changed from no-skill `look` to the exact best-skill action `go to desk 1`; the other two nodes preserved their no-skill actions and produced no unrelated action. Layer 11 alpha 8 also recovered that same node but changed another node, so it is less clean.
+- Larger alpha values generally increased unrelated action changes and did not improve overall recovery.
+
+Evidence boundary and next decision:
+- The technical route is now end-to-end and produced one exact held-out fork recovery on the task-level repaired case. This is a proof-of-route, not evidence of a stable cross-task skill vector: extraction n=3 and validation n=3 are too small, and only one task class recovered.
+- The next run should expand state-matched first-fork nodes within all three improved classes, retain stratified held-out certification, and compare global versus task-type vectors before adding secondary counterfactual probes.
+
+## 2026-07-14 Clean SkillOpt ALFWorld reproduction from minimal initial skill
+
+Question:
+- Can upstream SkillOpt evolve a deliberately minimal ALFWorld skill into a skill text that improves Qwen3.5-4B success on a fully held-out `valid_unseen` set?
+
+Protocol:
+- Code base reset to upstream `microsoft/SkillOpt` commit `fc1f827` before setup.
+- The only intended research-variable change is the minimal 209-character `skillopt/envs/alfworld/skills/rough_v1.md` initial skill.
+- Upstream SkillOpt prompts, gradient, optimizer, gate, slow update, and update policy are unchanged.
+- Two tested runtime bug fixes only: explicitly transmit Qwen `enable_thinking=false`, and resolve released relative ALFWorld gamefile paths against `ALFWORLD_DATA`; focused tests: `7 passed`.
+- Optimizer: `gpt-5.5`; target: `Qwen/Qwen3.5-4B`; target temperature `0.7`; thinking disabled.
+- Upstream critical settings: `num_epochs=4`, `batch_size=40`, `minibatch_size=8`, `merge_batch_size=8`, patch update, cosine edit budget 4 to 2, gate enabled, slow update enabled, meta-skill enabled.
+- ALFWorld horizon: `max_steps=50` consistently for train, selection, and test.
+- Runtime-only worker setting: spawn with `workers=3`, after the older 4-worker boundary had reproduced deadlocks.
+- Data: released train manifest 39; full official `valid_seen` 140 for selection; full official `valid_unseen` 134 for final test.
+- Core success criterion: `hard(best_skill, test134) - hard(rough_v1, test134) > 0`.
+
+Preflight evidence:
+- Both local Qwen endpoints listed `Qwen/Qwen3.5-4B`; authenticated target chat returned successfully.
+- `gpt-5.5` optimizer chat returned `OK`.
+- A clean-backend request without explicit `enable_thinking=false` spent its completion budget on reasoning and returned no content, directly motivating the one-line tested Qwen fix.
+- The first path smoke failed before any model call because the released relative manifest path was interpreted from the repository cwd; the minimal resolver fix moved the second smoke into real three-episode model/environment execution.
+
+Live run:
+- tmux: `skillopt_clean_repro_seed42_20260714`
+- output: `benchmarks/skillopt/outputs/skillopt_clean_repro_seed42_20260714`
+- launch state: active, computing the 140-item minimal-skill selection baseline.
+- Monitoring rule: inspect each completed selection round; stop and report on runtime/service failure or persistently very poor candidates with no improvement over baseline.
+
+## 2026-07-17 Latent space and steering vectors from the clean SkillOpt repro (seed42)
+
+Question:
+- Do the seed42 SkillOpt skill improvements (rough_v1 41.43% -> step-1 52.14% -> step-2 62.14% on valid_seen140)
+  correspond to identifiable directions in Qwen3.5-4B latent space, and can a reliable steering vector be
+  extracted from (a) NPM-style success/failure contrasts and (b) skill-driven paired rollouts?
+
+Data and infrastructure:
+- Same 140 valid_seen tasks under three skills: selection_eval_baseline (v0000), step_0001 and step_0002
+  selection evals from `benchmarks/skillopt/outputs/skillopt_clean_repro_seed42_20260714`.
+  Pair categories v0000 vs step2: repaired 34, broken 5, both_success 53, both_fail 48.
+- Behavior-only serialization (task + action/state trace, no skill text, no reward/done markers), exact
+  action-token spans, mean pooling; all 32 layers trajectory-level, 8 layers step-level, fp16.
+- Exact env replay of all 140 v0000 episodes recovered per-step prompts: 1188/1188 feedback matches, 0 errors,
+  1213 states (steps 0..8).
+- Prompt-conditioned contrast: each state forwarded under three prompts (bad = rough_v1, good = step-2
+  candidate text, none), last-token hidden at all 32 layers. best_skill.md had already been overwritten by the
+  accepted step-3 candidate (gate 0.65), so the step-2 candidate file was used deliberately to match the
+  behavioral rollouts.
+- Scripts: `research/steering/latent/` (README there documents the pipeline); run dir:
+  `research/steering/runs/latent_skillopt_repro42_20260717` (manifest, reps/, prompt_deltas.pt, vectors/,
+  analysis/, steered_eval/).
+- Envs: `skillopt-qwen35-vllm` (transformers 5.12) is the only env that loads Qwen3.5-4B for HF forwards;
+  `-cu128` (transformers 4.57) does not know `qwen3_5` and was used for env replay only.
+
+Latent-space findings:
+1. Length confound dominates naive inter contrasts: full-trajectory success/fail probes reach 0.96-0.97
+   (best layers 13-18), but an n_steps-only baseline gives 0.95-0.97 because failures are 50-step timeouts.
+   The clean PCA/t-SNE success/fail clusters encode outcome/length, not behavior quality. Cross-condition
+   probe transfer 0.95-0.98 for the same reason. (analysis/inter_layer_sweep.png, inter_pca_tsne.png)
+2. Early-window (first-5-step) outcome predictability is far weaker: 0.53-0.67 balanced accuracy.
+3. Repaired-pair full-trajectory deltas look consistent (pairwise cos 0.52 @L14 vs shuffled null 0.22) but
+   align at cos 0.89 with the success/fail direction - mostly the same outcome/length signal.
+4. Under length control (early5 and matched-prefix k<=10 reps) repaired-specific delta consistency collapses
+   to the shuffled-null level (~0.15-0.20): no task-specific "repair direction" survives.
+   (analysis/controlled_delta_sweep.png)
+5. The skill condition itself IS linearly identifiable from early behavior: task-grouped probe v0000-vs-step2
+   on early5 reps reaches 0.83 (L10-22); v0000 occupies a distinct region of the combined map while
+   step1/step2 overlap heavily. The skill shift is a global condition signature, not per-task directions.
+   (analysis/combined_condition_map.png)
+6. NPM-style intra (effective vs degenerate steps in failed v0000 rollouts, 1338 vs 2762): probe 0.97-0.98
+   at L10-18; strong but plausibly partly lexical (repeated action text, "Nothing happens" context).
+7. The prompt-conditioned skill contrast is the cleanest object: h(good)-h(bad) on identical states has
+   cross-state pairwise cosine 0.98 (L0-2), 0.86 (L14), 0.76 (L18), 0.63 (L31); uniform across pair
+   categories and step indices. At L14 the centroid shift is 2.3x the within-condition state spread and the
+   three prompt conditions form fully separated clusters. (analysis/prompt_space_l14.png)
+8. Vector-family geometry at mid depth: prompt(good-bad) vs behavioral early5 delta cos ~0.03-0.07 (near
+   orthogonal; different token positions), prompt(good-bad) vs inter ~0.0, behavioral early5 vs inter
+   -0.2..-0.5, prompt(good-bad) vs prompt(good-none) ~0.6, additivity gmb vs (gmn - bmn) = 1.0.
+   Better-skill conditioning, induced behavior shift, and outcome/length are three distinct axes.
+   (analysis/vector_alignment.png)
+
+Steering vectors saved: `vectors/` - families v_prompt_good_minus_bad, v_prompt_good_minus_none,
+v_behav_early5_all/repaired, v_inter_full at L{1,10,14,18,22} plus all-layer bundles and
+gmb_raw_means.pt (per-layer raw mean deltas for alpha calibration; ||mean delta||: L14 2.3, L18 3.5).
+
+Causal evaluation (HF greedy, skillopt-faithful system/user prompts, max_steps 35; matched task set
+12 repaired + 6 both_fail unless noted):
+- bad skill (rough_v1): 0/18. good skill (step-2 text): 7/18 (7/12 repaired) - the text-skill effect
+  reproduces under HF greedy.
+- bad + v_prompt_good_minus_bad L18 alpha 8: 1/18 (1/12 repaired). L14 alpha 2.5/5: 0/8 each.
+  L18 alpha 12: 0/8 with generation collapse (invalid-action rate 0.97). Random unit vector at L18 alpha 8:
+  0/8. Multi-layer injection of raw per-layer mean deltas (L6-22, alpha 1 or 1.5) destroys generation
+  outright (gibberish) - per-layer deltas compound through depth and cannot be injected jointly.
+- Graded behavior (action-set Jaccard vs the vllm good/bad reference rollouts; repeat rate):
+  bad_base 0.263/0.561, repeat 0.62; steered L18 a8 0.267/0.409, repeat 0.47, invalid 0.07->0.23;
+  random 0.223/0.540, repeat 0.59 (= baseline); good_base 0.538/0.372, repeat 0.40.
+  The gmb L18 vector produces a specific, dose-sensitive shift: it pushes behavior away from the bad-skill
+  pattern and reduces action perseveration (random vector does neither), but rarely lands on the good-skill
+  behavior needed for task success, and it costs invalid actions.
+
+Interpretation:
+- For steering-vector research on this stack, the reliable extractable object is the global
+  "better-skill conditioning" direction (prompt-conditioned contrast), not per-task repair directions and
+  not the naive success/fail direction (length artifact).
+- Single-layer injection of that direction is causally active and specific but under-dosed at safe alphas
+  and destructive past ~2-3x the layer's natural delta norm; it transfers the "stop perseverating" component
+  of the skill but not the full procedural content.
+
+Evidence boundary:
+- One model (Qwen3.5-4B), one SkillOpt run (seed42), 140 valid_seen tasks; causal arms are small
+  (8-18 episodes, greedy only, max_steps 35 vs 50 in the original run).
+- Inter/intra separations are descriptive; without the length/lexical controls they must not be read as
+  quality directions.
+- The prompt-conditioned vector is defined by two specific skill texts; generality across other skill pairs,
+  steps, seeds, or sampling temperatures is untested.
+- The 1/12 repaired flip at L18 alpha 8 with 0/12 baseline and 0/8 random control is directionally
+  encouraging but not statistically meaningful on its own; the specific behavioral shift (Jaccard-away-from-bad,
+  repeat-rate drop, random control flat) is the robust causal finding.
+
+Next steps that would add the most information:
+1. Token-slice and step-position ablations (steer only generated tokens vs all positions; only early steps).
+2. Projection-based injection (remove the bad-skill component along v instead of adding a constant) and
+   per-state adaptive alpha.
+3. Repeat the contrast with the step-3 skill text (9835 bytes, gate 0.65) and across seeds to test
+   generality of the conditioning direction.
+4. Temperature-0.7 multi-sample causal arms to match the original rollout distribution.
+
+## 2026-07-18 Clean SkillOpt reproduction final result (seed42)
+
+Question and success criterion:
+- Reproduce upstream SkillOpt on ALFWorld to obtain a high-quality skill text whose full valid_unseen134 hard score exceeds the minimal rough_v1 initial skill.
+- Core criterion: hard(best_skill, valid_unseen134) - hard(rough_v1, valid_unseen134) > 0.
+
+Formal setting:
+- Upstream base: microsoft/SkillOpt fc1f827; only tested Qwen thinking=false and ALFWorld relative-path fixes, plus a runtime-only dual-shard scheduler.
+- Optimizer gpt-5.5; target Qwen/Qwen3.5-4B; temperature 0.7; max_steps=50.
+- rough_v1 initial skill; train39; full valid_seen140 selection; full valid_unseen134 test; 4 optimization steps.
+- Runtime after baseline checkpoint: two independent ALFWorld managers, 8 workers each, pinned to Qwen endpoints 8007 and 8008. Search, prompts, scoring, sampling, data and optimizer settings were unchanged.
+- Output: benchmarks/skillopt/outputs/skillopt_clean_repro_seed42_20260714.
+
+Selection trajectory on full valid_seen140:
+- rough_v1: 58/140 = 0.414286.
+- Step 1: 73/140 = 0.521429, accepted.
+- Step 2: 87/140 = 0.621429, accepted.
+- Step 3: 91/140 = 0.650000, accepted.
+- Step 4 patch candidate: 87/140 = 0.621429, rejected.
+- Epoch-4 slow-update candidate: 95/140 = 0.678571 in final_selection_eval, promoted to formal best.
+
+Final full valid_unseen134 result:
+- rough_v1 baseline: 49/134 = 0.365672.
+- promoted best skill: 100/134 = 0.746269.
+- Absolute improvement: +51/134 = +0.380597 (+38.06 percentage points); relative solved-task increase 2.04x.
+- Best per task: pick_and_place 19/24=0.7917; pick_two_obj_and_place 9/17=0.5294; look_at_obj_in_light 18/18=1.0000; heat 13/23=0.5652; cool 16/21=0.7619; clean 25/31=0.8065.
+- Baseline per task: pick_and_place 15/24=0.6250; pick_two_obj_and_place 9/17=0.5294; look_at_obj_in_light 7/18=0.3889; heat 2/23=0.0870; cool 3/21=0.1429; clean 13/31=0.4194.
+
+Artifact verification:
+- best_skill.md, slow_update/epoch_04/candidate_skill.md and skills/skill_v0004.md are byte-identical (SHA256 88cc59c8962f7477...).
+- Full test artifacts: test_eval_baseline/results.jsonl and summary.json; test_eval/results.jsonl and summary.json, each with exactly 134 items.
+- Steering-relevant raw proposals, merged/ranked edits, edit apply reports, rejected step-4 candidate, slow-update comparison pairs and all skill versions remain preserved under the same output root.
+
+Runtime recoveries and evidence boundary:
+- Step-1 GPT-5.5 analyst 401 was caused by launcher key-name mapping; fixed by mapping OPTIMIZER_AZURE_OPENAI_API_KEY and reusing the completed rollout.
+- Step-3 GPT endpoint connection failure was recovered by preserving and reusing the completed 39/39 rollout; no baseline or completed rollout was recomputed.
+- Dual-shard scheduling changed throughput only and kept each ALFWorld manager at the proven 8-worker boundary.
+- This establishes a large text-skill performance gain for one seed, one target model and ALFWorld. It does not establish cross-seed or cross-model generality.
+
+Decision:
+- Reproduction succeeds. Use the promoted epoch-4 slow-update best_skill.md as the high-quality skill-text foundation for subsequent steering-vector work.
+
+## 2026-07-18 Round 2/3: gmn injection, gen-only steering, cross-text generality, temp-0.7 check
+
+Follow-up to the 2026-07-17 entry; same run dir `research/steering/runs/latent_skillopt_repro42_20260717`.
+Motivating user insights: (a) prefer skill-vs-none contrasts over good-vs-bad, (b) keep excluding verbal/length
+confounds, (c) analysis must serve the final rollout numbers.
+
+New machinery:
+- `steered_eval.py`: `--gen-only` (steer only decode steps via seq_len==1 hook guard, prompt encoding
+  untouched), `--temperature/--sample-tag` (seeded sampling arms).
+- `prompt_forward.py`: `--good-skill-path/--out-name`; `analyze_generality.py` compares delta directions
+  across skill texts. gmn_raw_means.pt added (gmn mean||delta||: L14 3.83, L18 5.87).
+- GPUs 0/3 shared with another user's SFT job this round (their 2x ~10 GB; no interference observed).
+
+Cross-text generality (strongest analysis result):
+- gmb(step-2 text) vs gmb(step-3 text) on identical 1213 states: mid-layer (10-22) mean cosine 0.948;
+  gmn: 0.970; bad-minus-none identity control 1.000 (forward determinism confirmed).
+- The skill-conditioning direction is text-independent across the two evolved texts (5.8 KB vs 9.8 KB).
+  Caveat: step-3 evolved from step-2 (related content); an unrelated handcrafted skill text is the missing
+  control. (analysis/generality_step2_vs_step3.png, generality_metrics.json)
+
+Causal arms (HF, max_steps 35; repaired = first 8/12 sorted; greedy unless noted):
+| arm | successes | notes |
+|---|---|---|
+| bad_base | 0/12 rep, 0/6 bf | repeat 0.62 |
+| good text | 7/12 rep, 0/6 bf | reference |
+| none_base | 2/12 rep (0025, 0037) | repeat 0.40 - rough_v1 is actively harmful vs no skill (induces perseveration) |
+| full-steer gmb L18 a8 | 1/12 (0025) | round 1 |
+| gen-only gmb L18 a8 | 2/8 (0015, 0025) | invalid 0.15; jac_good 0.34 |
+| gen-only gmb L18 a12 | 2/8 (0015, 0024) | works where full-position a12 collapsed; invalid 0.47 |
+| gen-only random a8 | 0/8 | behavior ~= baseline -> flips are vector-specific |
+| gen-only gmb L18 a16 | 0/8 | collapse (invalid 0.88) |
+| none + gmn L18 a6 | 1/12 rep + 1/6 bf | no net gain (2/18 vs 2/18) |
+| none + gmn L18 a10 | 2/8 (0015, 0025) | toward-good movement, invalid 0.41 |
+| none + gmn L14 a7.5 | 0/8 | L14 collapses at 2x norm; L18 is the robust layer |
+| bad t0.7 s1/s2 | 1/12, 2/12 | |
+| gen-only a8 t0.7 s1/s2 | 1/12, 0/12 | steering gain not detectable under sampling (n=24) |
+
+Findings:
+1. Gen-only injection strictly dominates full-position injection at matched dose (2/8 vs 1/12 flips, lower
+   invalid rate, larger behavioral movement) and extends the usable dose range (a12 functional vs collapsed).
+   Interpretation: steering the prompt encoding corrupts the state/action representations the policy must
+   read; steering only the generation stream conveys the conditioning signal at lower distortion.
+2. Vector-specific flips concentrate on tasks the good text also repairs: val:0015 flips at both gen-only
+   doses and under none+gmn a10; val:0024 at a12. val:0025 is a "restore-none-behavior" case (none_base also
+   solves it; the bad skill breaks it). Random control: 0 flips, no behavioral movement.
+3. none+gmn does not beat none_base on success despite moving behavior metrics; with rough_v1 being harmful,
+   the practically relevant axis on this run is bad->good, and "remove the bad-skill damage" (perseveration)
+   is what the vector reliably transfers.
+4. Temperature 0.7 drowns the effect at this sample size; greedy is the operating regime for these
+   single-vector interventions.
+
+Evidence boundary:
+- Repaired-subset ns remain 8-12 per arm; flip counts are 1-2. The specificity claim rests on the random
+  control (0/8, flat behavior) and the good-task alignment of flips, not on statistical power.
+- temp-0.7 null is n=24 over 2 seeds; a real sampling-regime test needs 5+ samples and both baselines.
+- Generality tested only between two related evolved texts.
+
+Next candidates: unrelated-text generality control; projection/ablation-style injection (remove bmn component
+instead of adding); per-step adaptive alpha; more repaired tasks per arm for power.
+
+## 2026-07-18 Round 4: step-ladder vectors, unit-edit vectors, semantics-to-vector alignment
+
+Goal (user direction): move from coarse bad-vs-good to (1) step-level and unit-edit-level conditioning
+vectors, and (2) a first viability test of the "skill-text semantic hidden -> steering vector" path.
+
+Setup:
+- `ladder_forward.py`: 600-state subsample of the 1213 replayed states; new variants forwarded: step-1
+  candidate text (s1) and s1 + each single ranked edit of step 2 (via `skillopt.optimizer.skill.apply_edit`).
+  Sequential application of the 3 ranked edits reproduces the step-2 candidate byte-for-byte
+  (`ladder_apply_check.json`), so the unit decomposition is exact. s2/s3/bad/none reps reused.
+- Skill-text self encodings (token-mean, all layers) for v0000/s1/s2/s3, the three unit texts, and the raw
+  edit contents.
+- `analyze_ladder.py` -> `analysis/ladder_metrics.json`, `analysis/ladder_geometry.png`.
+- GPUs 0/3 shared with another user's ~66 GB SFT job; forwards ran fine at ~0.45 s/state.
+
+Results (mid-layer 10-22 means):
+1. Step ladder: each increment is internally consistent across states (d01 0.76, d12 0.64, d23 0.69) but
+   increments are distinct directions (cos(d01,d12) 0.33, cos(d12,d23) 0.42, cos(d01,d23) 0.18) with norms
+   d01 2.87 >> d23 1.30 > d12 0.96. SkillOpt iteration is a curve, not a ray: the big first step installs
+   the dominant "skill presence/quality" direction (which is why cumulative deltas looked text-independent
+   at cos 0.948), later steps add smaller, content-specific directions.
+2. Unit edits (headline): the three single-edit conditioning vectors are near-orthogonal to each other
+   (pairwise cos 0.35 / 0.17 / 0.09), individually moderately consistent across states (0.45 / 0.53 / 0.15;
+   the weak one is also the smallest-norm edit), and compose almost perfectly linearly:
+   cos(sum_i v(e_i), d12) = 0.97, norm ratio 1.07. Skill units add up linearly in activation space.
+   This overturns the 2026-07-10 negative unit-level result, which used behavioral trajectory contrasts;
+   with prompt-conditioned extraction, unit-level directions exist and are additive.
+3. Semantics -> vector: zero alignment. Text-diff representations vs matched conditioning deltas:
+   diag 0.002 vs offdiag -0.002; unit edit text reps vs their vectors 0.005. The direction a skill text
+   INDUCES at the decision position is geometrically unrelated (in the naive sense) to the text's own
+   pooled representation. A direct "encode skill text, use as steering vector" path is not viable;
+   the path would require a learned text->vector mapping (many (edit, vector) pairs as supervision) or
+   empirical extraction per unit (as done here, ~4.5 min per unit text on one GPU).
+
+Evidence boundary:
+- One step-2 edit set (3 units) from one run/seed; consistency numbers are geometry, not causality - no
+  unit-vector injection arm has been run yet.
+- Text reps use token-mean pooling; other pooling choices were not swept (the flat ~0.00 across all mid
+  layers makes a pooling artifact unlikely to hide a large effect).
+- 600-state subsample (seed 42) of the 1213 states.
+
+Natural next causal test: inject v(e1) (search-frontier discipline edit, the most consistent unit) gen-only
+@L18 with alpha ~ 2x its layer norm into the s1-skill agent on tasks where s1 fails and s2 succeeds, with a
+mismatched-unit control (inject v(e0) on the same tasks).
+
+## 2026-07-18 Round 5: unit-vector causal test and norm-calibrated multi-layer injection
+
+Ops note: the seed42 SkillOpt run finished all 4 steps, so its two idle vllm servers (GPUs 1/2, 40 GB each)
+were shut down; round-5 arms moved off the contended GPUs 0/3 (another user's SFT) onto now-free GPUs 1/2.
+
+Arms (all gen-only; HF greedy; max_steps 35):
+A. Unit causal chain - 16 tasks where step-1 fails and step-2 succeeds, agent runs with the step-1 skill text:
+   - s1_base: 1/16 (val:0038 - a task HF-greedy s1 already solves)
+   - + v(e1) "search frontier discipline" L18 alpha 2.2 (3.0x own norm): 2/16 (+val:0050)
+   - + v(e0) "check visible surfaces early" L18 alpha 2.2 (3.9x own norm; mismatched-unit control): 4/16
+     (+val:0001, 0015, 0050)
+   - + v(d12) full step increment L18 alpha 3.3 (3.0x own norm): 1/16 (no gain)
+   Behavior (jaccard_good / repeat): base 0.28/0.48; e1 0.32/0.47; e0 0.39/0.41; d12 0.30/0.51.
+B. Norm-calibrated multi-layer (bad skill, 8 repaired tasks, direct comparison to single-layer L18 a8 = 2/8):
+   - gmb at layers {14,18,22}, each scaled to its own mean-delta norm (2.34/3.51/6.22), global alpha 1.0:
+     3/8 (val:0015, 0025, 0037 - 0037 is a flip single-layer never achieved), invalid rate 0.094
+     (vs 0.235 for single-layer a8), repeat 0.42.
+   - Same at alpha 1.5: 1/8, invalid 0.15 - the dose cliff reappears; the window is alpha ~1x per layer.
+
+Findings:
+1. NEW BEST INJECTION SCHEME: distributing the dose across three mid layers at each layer's natural delta
+   norm (gen-only) reaches 3/8 repaired flips - 75% of the good-text effect on this subset (good 4/8,
+   bad 0/8) - at near-baseline invalid-action cost. Spreading beats concentrating: single-layer needed
+   2-3x overdrive (with 3x the invalid rate) to reach 2/8.
+2. Unit vectors are causally active (both unit arms >= baseline in flips and behavioral movement) but the
+   designed unit-specificity test FAILED: the mismatched unit e0 outperformed the matched e1 (4 vs 2).
+   Honest caveats: both units are search-domain edits (weak contrast pair); absolute-alpha matching gave e0
+   a higher multiple of its own norm (3.9x vs 3.0x); n=16 with 1-3 flip differences. Notably e0's content
+   (prefer visible surfaces early) is plausibly the single most useful behavior for these pick/look tasks,
+   so its stronger effect is semantically coherent - what failed is the assignment-specific prediction,
+   not unit-level causal activity.
+3. Whole-increment injection underperforms its parts: v(d12) (= e0+e1+e2 geometrically, cos 0.97) at 3x norm
+   produced zero flips and the weakest behavioral movement. Injecting a sum direction dilutes the useful
+   unit component; unit-level injection is the better interface.
+
+Evidence boundary:
+- Flip counts 1-4 on n=8-16; no statistical claims. The multi-layer 3/8 vs 2/8 vs 0/8 ordering is consistent
+  with the behavioral metrics but needs replication on more tasks/seeds.
+- The unit-specificity question remains open pending a domain-disjoint unit pair (e.g., a fridge/cool
+  protocol edit vs a search edit) with per-norm-multiple-matched dosing.
+
+Updated default recipe: gen-only, layers {14,18,22} at 1x each layer's mean-delta norm, greedy decoding.
+
+## 2026-07-18 Round 6: domain-disjoint 2x2 unit specificity + mechanistic probes
+
+Design:
+- Unit S = step-2 edit e0 (prefer visible surfaces early; search domain). Unit P = step-3 ranked edit #1
+  (use direct heat/cool/clean at appliances; transform-protocol domain), extracted on the same s1 base text
+  and 600-state subsample (v_unit_P_l18: norm 0.36, consistency 0.28, cos to e0/e1 = 0.34/0.44).
+- Task sets from s1 failures with s2-or-s3 success: T_search (16; pick/pick-two/look types) and
+  T_protocol (19; heat/cool/clean types). Dose matched by own-norm multiple (3.9x): S alpha 2.2, P alpha 1.4.
+  Agent = step-1 skill text, gen-only L18, greedy.
+
+2x2 results (successes):
+                 T_search   T_protocol
+  s1_base          2/16        1/19
+  + S (search)     5/16        1/19
+  + P (protocol)   3/16        2/19
+Partial double dissociation: S gives +3 in-domain with exactly zero cross-domain effect - the cleanest
+unit-specificity evidence so far. P is weak everywhere (+1/+1); its norm is the smallest of all units and
+protocol tasks need long correct suffixes, so a weak persistent bias plausibly under-delivers there.
+Round-5 arms (e1, d12) cover subsets of these task sets and stay within noise.
+
+Mechanistic probes (analysis/logit_lens.json, analysis/teacher_forced_shift.json):
+- Teacher-forced likelihood shift at identical step-0 states (n=100, response = the good-skill rollout's
+  actual step-0 answer, injection on response positions only): bad prompt 0 (ref); + gmb L18 a8
+  -0.093/token (5% improved); + random same norm -0.094 (2%); + multi {14,18,22} a1 -0.075 (14%);
+  good prompt +0.305 (100%). The vector does NOT mimic the good prompt's local next-token policy; its
+  rollout effects must come from bias accumulating over the generated reasoning stream across steps.
+  Multi-layer calibrated injection is the least off-manifold per token, matching its best rollout numbers.
+- Logit-lens: unembedding projections of gmb/e0/P at L18 decode to semantically void multilingual
+  fragments - the conditioning direction is not vocabulary-aligned; naive "what words does it write" is a
+  null result, reported as such.
+
+Evidence boundary:
+- 2x2 cells are 16-19 tasks, differences of 1-3 flips; the S-unit dissociation pattern is directionally
+  clean but not individually significant; needs replication (more tasks or seeds) before a paper claim.
+- P's weakness confounds "protocol units are harder to vectorize" with "this particular edit is small";
+  a stronger protocol unit (e.g., step-3 edit #0 or a slow-update block) is the next candidate.
+- Teacher-forced test only probes step-0 single responses; a per-step version along full trajectories
+  would localize where the likelihood benefit emerges.
+
+## 2026-07-19 Round 7: the text-to-vector compiler T is learnable
+
+Decision context: Act-III applications chosen as A (hot-patch, main) and B (online reflexion compilation,
+secondary); B requires an amortized text->vector operator. The T dataset was therefore built from
+reflexion-style hints (deployment-distribution alignment), with the skillopt edits held out as a
+cross-domain test set.
+
+Dataset construction:
+- `reflexion_hints.py`: 149 failed episodes (v0000: 82, step1: 67) x 2 distinct generalizable hints each,
+  generated by kimi-k2.5 (all GPT channels on the gateway were down with upstream 500s; hint authorship is
+  not a research variable). 298 hints, 0 errors, 0 duplicates.
+- `units_forward.py`: uniform unit application (appended to the step-1 base under "## Additional Hints"),
+  200-state subsample, ground-truth conditioning vector = mean last-token delta, all 32 layers, plus the
+  unit text's own mean-pooled and last-token reps. 305 units total, two GPU shards, ~2.5 h each.
+- Hint unit vectors are respectable objects: mean cross-state consistency 0.478 @L18 (n=298), comparable to
+  the hand-picked skillopt units (0.53).
+
+Compiler and protocol (pre-declared in train_T.py):
+- T = per-output-layer ridge regression (alpha 100), input = unit-text rep at L14+L18+L22 concatenated.
+- Primary metric: held-out cosine AFTER removing the mean unit vector, because 92-94% of any hint vector's
+  direction is a shared "instruction present" component; a compiler that learns only that scores 0.
+- Splits grouped by source episode (both hints from one episode always in the same fold).
+
+Results (text_mean input):
+  L14: heldout residual cos 0.579  (raw 0.962; predict-mean baseline raw 0.943; shuffled null -0.000)
+  L18: heldout residual cos 0.589  (raw 0.947; baseline 0.919; shuffled null  0.001)
+  Cross-domain (train hints -> test 7 skillopt edits): residual cos 0.331 (L14) / 0.277 (L18).
+  text_last input is slightly worse (residual 0.530 @L18, cross-domain 0.147) -> text_mean is the default.
+
+Interpretation:
+- The Round-4 finding stands refined: there is no DIRECT geometric identity between a skill text's own
+  representation and its conditioning vector (naive alignment 0.00), but a SIMPLE LINEAR MAP learned from
+  ~300 (text, vector) pairs predicts the unit-specific component of unseen hints at cos 0.58 vs a
+  permutation null of 0.00. The text->vector path is an learnable operator, not a lookup.
+- Cross-domain transfer to skillopt-style edit texts is positive but weaker (0.28-0.33, n=7) - style
+  matters; a production compiler should train on mixed-style units.
+- This makes online reflexion compilation feasible in principle: hint -> one forward for its text rep ->
+  T -> vector, no extraction rollouts.
+
+Evidence boundary:
+- Geometry only: no causal arm has yet injected T-PREDICTED vectors. The decisive next test is
+  inject-predicted vs inject-extracted vs no-injection on held-out hints (planned).
+- One model, one base skill text (s1), uniform append application; 200-state extraction subsample.
+- Residual cos 0.58 is direction-only; predicted-vector norms and optimal doses not yet calibrated.
+
+Artifacts: t_dataset/{hints.jsonl, unit_vectors_shard*.pt, T_eval_text_mean.json, T_eval_text_last.json};
+scripts research/steering/latent/{reflexion_hints, units_forward, train_T}.py.
+
+## 2026-07-19 Round 8: causal validation of compiler-predicted hint vectors — negative
+
+Design (pre-declared): 20 held-out step1-failure tasks (top extracted-vector consistency, one hint each);
+s1 agent retries with per-task injection @L18 gen-only, dose 3.9x extracted norm (alpha 2.4-3.0). Arms:
+baseline / extracted ground-truth vector / T-predicted vector (T retrained excluding these 20 episodes;
+cos(pred, extracted) raw mean 0.941) / random unit vector. Success criterion: predicted ~= extracted, both
+> base ~= random.
+
+Result: no separation anywhere.
+  success: base 1/20, extracted 1/20, predicted 2/20, random 2/20.
+  behavior (jaccard_good / repeat / invalid): base .467/.48/.08; extracted .534/.48/.09;
+  predicted .574/.50/.10; random .520/.49/.09 - the random arm moves as much as the ground-truth arm,
+  so the small movements are generic perturbation, not hint content.
+
+Interpretation:
+- The failure is upstream of the compiler: even EXTRACTED hint vectors are causally inert here, so the
+  round says nothing for or against T's direction quality (geometry validation from Round 7 stands).
+- Differences from the earlier positive unit results (S unit +3 in-domain): (a) injection used single-layer
+  L18, not the proven multi-layer {14,18,22} calibrated recipe; (b) tasks are the agent's own hardest
+  failures (selected by hint consistency, mixed domains), vs curated in-domain sets; (c) hint texts are
+  episode-specific advice (kimi-k2.5-authored), plausibly lower behavioral leverage than optimizer-selected
+  skill edits that survived SkillOpt's gate.
+- Honest status of the online-reflexion loop (mode B): text->vector compilation is geometrically learnable
+  (R7), but single-hint vector injection does not yet causally transfer the hint's content at unit-scale
+  doses. Remaining levers before writing the loop off: multi-layer calibrated injection of hint vectors,
+  dose sweep, and hint-quality filtering (e.g., only hints whose TEXT demonstrably repairs the episode when
+  prepended - a text-effect precondition we skipped).
+
+Evidence boundary: n=20/arm, single seed, greedy; the text-effect precondition (does the hint text itself
+fix the retry?) was not measured and is the key missing control - without it, "vector fails to transfer
+content" and "content is worthless" are indistinguishable.
+
+Artifacts: t_dataset/causal_vectors/ (per-task vectors + maps + eval_meta), steered_eval/{s1_base,
+T_extracted,T_predicted,T_random}, analysis/behav_effect.json updated.
+
+## 2026-07-20 Round 9: disambiguating the Round-8 null (text control + multi-layer recipe)
+
+Arms (same 20 held-out failure tasks, s1 agent):
+- hint_text_prepend: skill = s1 + hint text appended exactly as in extraction. 3/20 (base 1/20;
+  +val:0103, val:0129). Behavior: jaccard_good .52 vs base .47.
+- T_extracted_multi: extracted hint vectors injected with the calibrated multi-layer recipe
+  ({14,18,22} at 1.5x own per-layer norm, gen-only): 1/20 - same as single-layer, same as base.
+
+Reading of rounds 8+9 together:
+1. The hint TEXT has weak but nonzero causal content on these hardest-failure retries (+2/20 = 10 pp).
+2. Vector injection - single-layer or multi-layer, extracted or predicted - transfers none of it (all 1-2/20,
+   random-equivalent).
+3. Sensitivity caveat: with a text upper bound of only +2/20, even a perfect vector transfer would be
+   statistically invisible at n=20. The deeper contrast is with the skill-edit setting, where the text
+   effect was large (0/18 -> 7/18) and vectors recovered a substantial fraction (3/8 multi-layer; S unit
+   +3 in-domain).
+
+Emerging boundary hypothesis (paper-relevant): vectorization at mean-delta/safe-dose scale transfers
+GLOBAL behavioral-mode content (skill presence, search discipline, anti-perseveration) but not weak,
+episodic, task-specific advice. "What kinds of textual knowledge are vectorizable" is itself a finding.
+
+Status of mode B (online reflexion compilation): compiler geometry validated (R7: held-out residual cos
+0.59 vs null 0.00); causal loop NOT validated at hint granularity (R8/R9). Mode B downgraded to
+"geometry-ready, causally open"; application weight shifts to mode A (hot-patch), which retains positive
+causal evidence.
+
+Proposed redemption test (cheap, not yet run): use T to PREDICT the strong search-edit unit vector from its
+TEXT (cross-domain compilation), inject predicted-S on T_search (16 eps), compare with extracted-S (5/16)
+and baseline (2/16). If predicted-S flips like extracted-S, the compiler is causally valid exactly where
+unit content is strong - separating "compiler works" from "hints are weak".
+
+Artifacts: steered_eval/{hint_text_prepend, T_extracted_multi}; t_dataset/hint_skill_texts/,
+causal_vectors/map_extracted_multi.json.
+
+## 2026-07-20 Round 10: redemption test — T-compiled strong-unit vectors are causally active
+
+Setup: T (ridge, trained on all 298 reflexion hints; skillopt units never in training) compiles the strong
+unit vectors S = step_0002_e0 (search) and P = step_0003_e1 (protocol) from their TEXT alone.
+cos(predicted, extracted) = 0.845 (S) / 0.878 (P). Inject single-layer L18 gen-only, alpha 3.9x extracted
+norm, on the domain-matched task sets; baselines reused from Round 6.
+
+Results:
+  T_search (16):   base 2/16 | extracted-append 2/16 | T-predicted 5/16 | (R6 apply_edit extracted 5/16)
+  T_protocol (19): base 1/19 | extracted-append 0/19 | T-predicted 3/19
+Behavior (T_search): base jaccard_good .47 / repeat .48; extracted .39 / .50; predicted .43 / .44.
+
+Findings:
+1. PASS on the core question: a text->vector compiler trained only on reflexion hints produces vectors that
+   are causally effective on held-out strong units — T-predicted-S reaches 5/16 (equal to the strongest
+   prior extraction result, R6) and T-predicted-P reaches 3/19, both clearly above baseline (2/16, 1/19).
+   Contrast with R8/R9 where weak hint units transferred nothing: the boundary "vectorization moves strong
+   content, not weak episodic advice" now has both a negative (hints) and a positive (compiled strong units)
+   arm.
+2. Caveat A (do not overclaim "predicted > extracted"): the append-style extraction used here is an
+   anomalously weak reference (S 2/16, P 0/19) vs the apply_edit-style extraction of R6 (5/16), because
+   appending under "## Additional Hints" is a weaker prompt manipulation than proper section insertion. The
+   defensible claim is predicted == known-strong extraction and predicted >> baseline, not predicted beats
+   its own ground truth.
+3. Caveat B (specificity untested): only predicted-S on search and predicted-P on protocol were run; the
+   cross cells are missing, so part of the predicted vector's effect may ride the global shared "instruction
+   present" component (independently worth ~3/8) rather than unit-specific content. A predicted-S-on-protocol
+   / predicted-P-on-search 2x2 is the needed follow-up.
+
+Status: Mode-B compiler advances from "geometry-ready, causally open" to "causally active on strong units".
+The text->vector operator is now supported at three levels: geometric (R7 residual cos 0.59), and causal on
+strong compiled units (R10). Remaining for a clean claim: (a) match extraction format (apply_edit) for the
+reference, (b) the predicted-vector specificity 2x2, (c) power at unified full sets.
+
+Artifacts: t_dataset/causal_vectors/{redeem_report.json, map_redeem_*}, steered_eval/redeem_{S,P}_{extracted,predicted}.
+
+## 2026-07-21 Qwen3-32B faithful Reflexion and exploratory T port
+
+Question: does minimally modified, same-model Reflexion provide effective text,
+and can a newly trained 32B text-to-vector compiler reproduce that effect?
+
+Text gate (valid_seen, 40 stratified tasks): 10 initial successes; among 30
+initial failures, matched two-retry no-reflection control succeeded on 6/30
+(20%) and faithful full-text Reflexion on 12/30 (40%), an absolute +20 pp.
+G1 PASS (threshold +15 pp). Paired cells: Reflexion-only 9, control-only 3,
+both 3, neither 15. The final valid run had no duplicate ids or runtime errors.
+
+Exploratory extraction/compiler: 55 full reflections from 30 episode groups,
+including 12 whose immediately following textual retry succeeded and 9 with a
+successful text retry while the matched control never succeeded. Qwen3-32B
+labels and text representations were extracted at all 64 layers over 200 fixed
+states. A provisional proportional-depth configuration used inputs L28/L36/L44
+and outputs L28/L36. On the 12 text-success units, grouped held-out residual
+cosine minus shuffled null was +0.397 at L28 and +0.407 at L36. This is geometry
+evidence only; the sample is too small and proportional layer mapping is not a
+validated 32B layer-selection method.
+
+Exploratory causal diagnostics (12 text-success tasks, greedy): baseline 2/12,
+full reflection text 8/12. Static single-layer L36 injection at 3.9x extracted
+delta norm produced extracted 0/12, predicted 0/12, random 2/12, with invalid
+action rates 34.5%, 41.0%, and 31.8% versus 5.0% for baseline. This is classified
+as an off-manifold dose/protocol failure, not evidence against vector content.
+A 3.0x diagnostic remained unsafe: extracted 1/12, random 0/12, and predicted
+0/10 when the user stopped the run. It is intentionally incomplete and must not
+be promoted to G3.
+
+Decision: freeze all proportional-layer/fixed-dose 32B results as exploratory.
+Before resuming T, build model-independent steering core modules, select 32B
+layers on development data without 4B layer-number mapping, calibrate a safe
+hidden-relative strength policy with random controls, and expand/pre-split the
+faithful reflection dataset. Final evidence must prioritize task success and
+paired flips; cosine remains a compiler diagnostic.
+
+Artifacts: research/steering/runs/reflex_T_qwen3_32b_20260721/{phase1,phase2}.
