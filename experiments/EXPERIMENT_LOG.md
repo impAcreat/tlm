@@ -1942,3 +1942,32 @@ predicted-vector causal validation (`0c51ac8`).
 Gate remains unchanged: wait for all 296 groups, require G1 absolute lift >=15
 percentage points plus at least 60 `text_success` and 40 `paired_effective`
 units, otherwise do not extract vectors or train T.
+
+## 2026-07-22 Qwen3-32B clean faithful Reflexion gate — PASS
+
+The frozen Train+Dev collection completed all 296/296 task-seed groups with no
+missing or duplicate ids and no runtime errors. There were 75 initial successes
+and 221 eligible initial failures. On those failures, matched two-retry
+no-memory control succeeded on 42/221 (19.00%), while faithful same-model full
+Reflexion succeeded on 85/221 (38.46%): absolute lift +19.46 percentage points.
+G1 passes the pre-registered +15 pp threshold. Paired cells were Reflexion-only
+59, control-only 16, both 26, neither 120.
+
+The unmodified reflection dataset contains 386 full texts from 221 failed
+groups and 73 distinct tasks: 85 `text_success` and 59 conservative
+`paired_effective`. Train contributes 73/53 and Dev 12/6 respectively, so both
+pre-registered data sufficiency thresholds (60/40 overall) pass.
+
+Effect heterogeneity is material and must remain visible: Reflexion was strong
+for `look_at_obj_in_light` (13/21 versus 2/21 control) and `pick_and_place`
+(24/32 versus 6/32), but weak for cooling (12/53 versus 9/53), heating (12/34
+versus 9/34), two-object placement (6/38 versus 4/38), and cleaning (18/43
+versus 12/43). The aggregate gate establishes that faithful text has causal
+value on the frozen mixture; it does not establish uniform benefit across task
+types.
+
+Decision: proceed to Train+Dev all-64-layer extraction over the frozen 200
+states, then Train-only Pareto diagnostics and Dev-only causal layer/dose
+selection. Test remains untouched. Evidence:
+`research/steering/runs/reflex_T_qwen3_32b_clean_20260721/reflections/summary.json`
+and `t_dataset/hints_summary.json`.
