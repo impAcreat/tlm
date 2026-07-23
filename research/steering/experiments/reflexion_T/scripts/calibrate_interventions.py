@@ -132,7 +132,7 @@ def run_arm(model, tokenizer, device, benchmark, entry, *, reflection, steerer_s
                 env.close()
             except Exception:
                 pass
-    repeats = sum(a and a == b for a, b in zip(actions[1:], actions[:-1]))
+    repeats = sum(bool(a) and a == b for a, b in zip(actions[1:], actions[:-1]))
     return {
         "hard": int(won),
         "n_turns": len(trace),
