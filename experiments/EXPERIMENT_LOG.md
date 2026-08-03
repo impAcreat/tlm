@@ -190,3 +190,77 @@ hides churn.
 ---
 
 # Log
+
+## 2026-08-03 Dev-A dose sweep at L23 — effect appears only above the old grid; no evidence dose must be adaptive
+
+**Question.** On a properly powered set, does an extracted reflection vector raise
+task success over matched controls, and must the steering strength be per-unit?
+
+**Protocol.** Dev-A (19 task-disjoint Train `text_success` tasks from the frozen
+`phase3/causal_task_splits.json`, SHA `4b18f32d…`), Qwen3-32B, layer 23,
+generation-only, greedy, max 35 steps.  Arms baseline / text / extracted /
+norm-matched random / deterministic mismatched donor, at multipliers
+**0.5, 1.0, 2.0, 4.0** of the hidden-relative natural dose.  266/266 evals
+completed, 19/19 units complete, zero runtime errors.  Test untouched.
+Dev-B untouched.
+
+**Results.**  Baseline 1/19 (0.053).  Text upper bound 14/19 (0.737), paired
+delta +0.684 — high by construction, since these are `text_success` units.
+
+| multiplier | extracted | random | mismatched |
+|---:|---|---|---|
+| 0.5 | 1/19 | 1/19 | 2/19 |
+| 1.0 | 1/19 | 0/19 | 0/19 |
+| **2.0** | **4/19 (0.211)** | 2/19 (0.105) | 1/19 (0.053) |
+| 4.0 | 1/19 | 1/19 | 2/19 |
+
+At m=2.0: extracted paired delta **+0.158 [-0.053, +0.368]**, W/L **4/1**;
+random +0.053 (W/L 2/1); mismatched +0.000 (W/L 1/1).  The summarizer marks
+m=2.0 content-specific — extracted beats both controls — but **the interval
+crosses zero at n=19, so this is directional, not significant.**
+
+**Finding 1 — the previous grid could not have found this.**  The dose response
+is non-monotone with a single peak at 2x: 0.5x and 1.0x sit exactly at baseline,
+4.0x collapses back.  The abandoned grid was {0.25, 0.5, 1.0}, and the earlier
+Dev pilot ran only m=0.25.  **A null at those doses was uninformative, not
+evidence against vector content.**  Matching the magnitude of the text's own
+perturbation (m=1.0) is not enough; the mean direction averaged over states
+carries less useful component per unit norm than the state-specific natural
+delta, so overdrive is required — consistent with the 4B line needing 2-3x.
+
+**Finding 2 — no evidence that dose must be adaptive.**  `adaptive_dose_value`:
+extracted best-global 0.211 @ m2.0 vs oracle-per-unit 0.263, gap **+0.053**.
+The norm-matched random arm has an **identical** gap of +0.053, so
+`excess_over_control` is **exactly 0.000**.  The apparent per-unit dose
+heterogeneity is fully explained by after-the-fact selection over four doses.
+One global multiplier is adequate at this sample size; a per-unit dose policy is
+not currently justified.
+
+**Finding 3 — the vector recovers about a quarter of the text effect.**
++0.158 of +0.684 = 23%.  The 4B line's "recovers ~75% of the text effect" figure
+came from cherry-picked repaired subsets; on a pre-registered, non-cherry-picked
+set the honest number is much smaller.
+
+**Evidence boundary.**
+- n=19, differences of 1-3 tasks; no statistical claim.  Ordering
+  (extracted > random > mismatched = baseline) is consistent at the peak dose
+  only.
+- Floor effect: baseline is 1/19 with 18/19 rollouts hitting the 35-step
+  timeout.  Conclusions are about a near-non-functional base agent.
+- **Harness concern**: `format_repair_rate` is 0.47-0.59 at m<=2.0, i.e. the
+  model fails to emit `<action>` tags on roughly half of all steps and is being
+  repaired by normalization.  At m=4.0 it drops to 0.045 while success stays at
+  baseline — well-formed but wrong actions.  This asymmetry is unexplained and
+  should be understood before the format-repair path is trusted.
+- m=1.0 is flagged content-specific only because both controls fell to 0/19;
+  that is specificity by the controls degrading, not by extracted improving.
+  Do not report it as a positive condition.
+
+**Artifacts.** `phase2/calibration_devA_L23_shard{0..3}.jsonl`,
+`phase2/calibration_devA_L23_summary.{json,md}`,
+`phase2/launch_devA_L23.sh`.
+
+**Next.** Dev-B (18 held-out tasks) as an independent confirmation of the
+Dev-A-selected configuration L23 @ m=2.0, arms baseline/text/extracted/random/
+mismatched — 90 rollouts, about 30 minutes on four A100s.  Selection is now
+frozen; Dev-B is one-shot and must not be reused.
