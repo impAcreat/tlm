@@ -45,8 +45,33 @@ def load_records(paths: list[Path]) -> list[dict]:
     return list(merged.values())
 
 
-def select_dev_units(records: list[dict], limit: int) -> list[dict]:
-    eligible = [r for r in records if r.get("split") == "dev" and r.get("text_success")]
+def select_dev_units(
+    records: list[dict],
+    limit: int,
+    *,
+    causal_split_manifest: Path | None = None,
+    causal_split: str | None = None,
+) -> list[dict]:
+    if causal_split_manifest is None:
+        eligible = [r for r in records if r.get("split") == "dev" and r.get("text_success")]
+    else:
+        if not causal_split:
+            raise ValueError("--causal-split is required with --causal-split-manifest")
+        manifest = json.loads(causal_split_manifest.read_text())
+        try:
+            allowed_tasks = set(manifest["splits"][causal_split]["task_ids"])
+        except KeyError as exc:
+            raise ValueError(f"unknown causal split: {causal_split}") from exc
+        eligible = [
+            r for r in records
+            if r.get("split") == "train"
+            and r.get("text_success")
+            and r["task_id"] in allowed_tasks
+        ]
+        found_tasks = {r["task_id"] for r in eligible}
+        missing = sorted(allowed_tasks - found_tasks)
+        if missing:
+            raise ValueError(f"causal split tasks missing vectors: {missing}")
     eligible.sort(key=lambda r: (not bool(r.get("paired_effective")), r["task_id"], r["retry_index"]))
     selected, used_tasks = [], set()
     for record in eligible:
@@ -173,13 +198,20 @@ def main() -> None:
     parser.add_argument("--layers", type=int, nargs="+", required=True)
     parser.add_argument("--multipliers", type=float, nargs="+", default=[0.25, 0.5, 1.0])
     parser.add_argument("--limit-units", type=int, default=12)
+    parser.add_argument("--causal-split-manifest", type=Path)
+    parser.add_argument("--causal-split")
     parser.add_argument("--shard", default="0/1")
     parser.add_argument("--max-steps", type=int, default=35)
     parser.add_argument("--max-new-tokens", type=int, default=320)
     args = parser.parse_args()
 
     shard_index, shard_count = map(int, args.shard.split("/"))
-    all_records = select_dev_units(load_records(args.inputs), args.limit_units)
+    all_records = select_dev_units(
+        load_records(args.inputs),
+        args.limit_units,
+        causal_split_manifest=args.causal_split_manifest,
+        causal_split=args.causal_split,
+    )
     records = all_records[shard_index::shard_count]
     manifest = json.loads(args.manifest.read_text())
     model, tokenizer = load_causal_lm(args.model_path, args.device)
@@ -233,6 +265,7 @@ def main() -> None:
                     "unit_id": record["unit_id"],
                     "task_id": record["task_id"],
                     "group_id": record["group_id"],
+                    "causal_split": args.causal_split or "pilot",
                     "arm": arm,
                     "layer": layer,
                     "multiplier": multiplier,
