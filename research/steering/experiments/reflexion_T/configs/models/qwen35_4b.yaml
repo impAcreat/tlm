@@ -1,0 +1,14 @@
+model:
+  id: Qwen3.5-4B
+  path: models/Qwen3.5-4B
+  family: qwen
+  num_layers: 32
+  hidden_size: 2560
+  dtype: bfloat16
+  enable_thinking: false
+
+# Mature reference configuration. Layer and dose values remain explicit
+# historical settings; new calibration must write a new config, not mutate this.
+reference:
+  layers: [14, 18, 22]
+  causal_layer: 18

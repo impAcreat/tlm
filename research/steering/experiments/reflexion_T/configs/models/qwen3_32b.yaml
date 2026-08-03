@@ -1,0 +1,13 @@
+model:
+  id: Qwen3-32B
+  path: models/Qwen3-32B
+  family: qwen
+  num_layers: 64
+  hidden_size: 5120
+  dtype: bfloat16
+  enable_thinking: false
+
+# Intentionally unset: 32B layer and strength are development variables.
+calibration:
+  layer: null
+  strength: null

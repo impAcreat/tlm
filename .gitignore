@@ -18,6 +18,11 @@
 **/models/
 **/datasets/
 **/.cache/
+
+# `**/models/` above is meant for weight directories, but it also swallowed two
+# source directories that the steering code imports at runtime.  Re-include them.
+!research/steering/adapters/models/
+!research/steering/experiments/reflexion_T/configs/models/
 *.log
 *.jsonl
 *.safetensors
